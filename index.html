@@ -495,7 +495,7 @@
     ctx.arc(cx, cy, radius, START_ANGLE, angleForTime(cur, totalDuration));
     ctx.lineWidth = ring;
     ctx.lineCap = 'butt';
-    ctx.strokeStyle = 'rgba(110,231,255,0.9)';
+    ctx.strokeStyle = isPlaying ? 'rgba(110,231,255,0.9)' : 'rgba(148,163,184,0.6)';
     ctx.stroke();
 
     // Minor ticks (each minute)
@@ -544,27 +544,38 @@
       const line1 = "Next gong:";
       const line2 = fmt(remaining);
       const fontSize = Math.floor(w*0.032);
-      
+
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      
-      // Position outside the ring
-      const textRadius = radius + ring * 1.8;
-      const textX = cx + textRadius * Math.cos(aNow);
-      const textY = cy + textRadius * Math.sin(aNow);
-      
-      // Calculate background dimensions
+
+      // Calculate text dimensions first
       const line1Metrics = ctx.measureText(line1);
       const line2Metrics = ctx.measureText(line2);
       const maxWidth = Math.max(line1Metrics.width, line2Metrics.width);
       const lineHeight = fontSize * 1.2;
       const totalHeight = lineHeight * 2;
-      
+      const padding = 6;
+
+      // Position outside the ring, but constrain to canvas bounds
+      const textRadius = radius + ring * 1.8;
+      let textX = cx + textRadius * Math.cos(aNow);
+      let textY = cy + textRadius * Math.sin(aNow);
+
+      // Constrain X position to keep text on screen
+      const halfWidth = maxWidth/2 + padding;
+      if (textX - halfWidth < 0) textX = halfWidth;
+      if (textX + halfWidth > w) textX = w - halfWidth;
+
+      // Constrain Y position to keep text on screen
+      const halfHeight = totalHeight/2 + padding;
+      if (textY - halfHeight < 0) textY = halfHeight;
+      if (textY + halfHeight > h) textY = h - halfHeight;
+
       // Background for text readability
       ctx.fillStyle = 'rgba(15,17,21,0.85)';
-      ctx.fillRect(textX - maxWidth/2 - 6, textY - totalHeight/2 - 3, maxWidth + 12, totalHeight + 6);
-      
+      ctx.fillRect(textX - maxWidth/2 - padding, textY - totalHeight/2 - 3, maxWidth + 12, totalHeight + 6);
+
       // Render both lines
       const textColor = remaining < 30 ? 'rgba(110,231,255,0.95)' : 'rgba(167,139,250,0.95)';
       ctx.fillStyle = textColor;
@@ -623,7 +634,7 @@
 
     // Play/pause icon
     const iconSize = w * 0.028;
-    const iconY = cy + w*0.075;
+    const iconY = cy + w*0.075 + 5;
     ctx.fillStyle = 'rgba(110,231,255,0.85)';
     if (isPlaying) {
       // Pause icon
