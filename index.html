@@ -177,6 +177,9 @@
   let dragging = false;
   let lastGongIndex = -1;
   let gongTimeouts = []; // Track active gong timeouts
+  // Normalized pointer coords in [0,1] within the centered square
+  let pointerUX = 0;
+  let pointerUY = 0;
 
   // Drawing metrics
   const DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -217,19 +220,25 @@
 
   function angleFromPointer(ev) {
     const rect = dial.getBoundingClientRect();
-    const x = (ev.clientX - rect.left) * DPR;
-    const y = (ev.clientY - rect.top) * DPR;
-    const cx = dial.width / 2;
-    const cy = dial.height / 2;
+    const size = Math.min(rect.width, rect.height);
+    const left = rect.left + (rect.width - size) / 2;
+    const top  = rect.top  + (rect.height - size) / 2;
+    const x = ev.clientX - left;
+    const y = ev.clientY - top;
+    const cx = size / 2;
+    const cy = size / 2;
     return Math.atan2(y - cy, x - cx);
   }
 
   function distanceFromCenter(ev) {
     const rect = dial.getBoundingClientRect();
-    const x = (ev.clientX - rect.left) * DPR;
-    const y = (ev.clientY - rect.top) * DPR;
-    const cx = dial.width / 2;
-    const cy = dial.height / 2;
+    const size = Math.min(rect.width, rect.height);
+    const left = rect.left + (rect.width - size) / 2;
+    const top  = rect.top  + (rect.height - size) / 2;
+    const x = ev.clientX - left;
+    const y = ev.clientY - top;
+    const cx = size / 2;
+    const cy = size / 2;
     return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
   }
 
@@ -371,10 +380,9 @@
   dial.addEventListener('pointerdown', async (e) => {
     await initAudioContext();
     const centerDistance = distanceFromCenter(e);
-    const radius = Math.min(dial.width, dial.height) * 0.38;
-
-    // Add small tolerance for mobile touch
-    const centerRadius = radius * 0.6;
+    const rect = dial.getBoundingClientRect();
+    const cssRadius = Math.min(rect.width, rect.height) * 0.38;
+    const centerRadius = cssRadius * 0.6;
 
     if (centerDistance < centerRadius) {
       // Click in center - toggle play/pause
@@ -382,13 +390,27 @@
     } else {
       // Click on outer ring - start dragging
       dragging = true;
+      const r = dial.getBoundingClientRect();
+      const size = Math.min(r.width, r.height);
+      const left = r.left + (r.width - size) / 2;
+      const top  = r.top  + (r.height - size) / 2;
+      pointerUX = (e.clientX - left) / size;
+      pointerUY = (e.clientY - top)  / size;
       dial.setPointerCapture(e.pointerId);
       scrub(e);
     }
   });
 
-  dial.addEventListener('pointermove', (e) => { 
-    if (dragging) scrub(e); 
+  dial.addEventListener('pointermove', (e) => {
+    if (dragging) {
+      const r = dial.getBoundingClientRect();
+      const size = Math.min(r.width, r.height);
+      const left = r.left + (r.width - size) / 2;
+      const top  = r.top  + (r.height - size) / 2;
+      pointerUX = (e.clientX - left) / size;
+      pointerUY = (e.clientY - top)  / size;
+      scrub(e);
+    }
   });
 
   function scrub(e) {
@@ -558,6 +580,27 @@
     ctx.strokeStyle = 'rgba(110,231,255,1)';
     ctx.lineCap = 'round';
     ctx.stroke();
+
+    // Draw line from cursor to dial when dragging
+    if (dragging) {
+      const canvasX = pointerUX * w;
+      const canvasY = pointerUY * h;
+
+      // Calculate dial edge point on the line from center to pointer
+      const dx = canvasX - cx;
+      const dy = canvasY - cy;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const edgeX = cx + (dx / distance) * radius;
+      const edgeY = cy + (dy / distance) * radius;
+
+      ctx.beginPath();
+      ctx.moveTo(canvasX, canvasY);
+      ctx.lineTo(edgeX, edgeY);
+      ctx.lineWidth = 2 * DPR;
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
 
     // Center play/pause area
     ctx.beginPath();
