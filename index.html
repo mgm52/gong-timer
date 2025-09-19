@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Gong Timer — Interactive Player</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --ink: #e9eef7;
+    --muted: #94a3b8;
+    --accent: #6ee7ff;
+    --accent2:#a78bfa;
+  }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
+    overflow: hidden;
+  }
+  .wrap {
+    height: 100vh;
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+  }
+  .panel {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 10px;
+    box-sizing: border-box;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  button {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--ink);
+    padding: 8px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  button:active { transform: translateY(1px); }
+  .time-readout {
+    font-variant-numeric: tabular-nums;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: .5px;
+  }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 6px;
+  }
+  .chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 6px 8px;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .hint { 
+    color: var(--muted); 
+    font-size: 11px; 
+    text-align: center;
+    display: none;
+  }
+  .canvas-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  canvas { 
+    width: 100%;
+    height: 100%;
+    max-width: min(100%, 100vh - 280px);
+    max-height: min(100%, 100vh - 280px);
+    display: block; 
+    touch-action: none; 
+    cursor: pointer;
+    object-fit: contain;
+  }
+  .next-gong {
+    text-align: center;
+    margin-top: 8px;
+    color: var(--accent2);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  @media (min-width: 640px) {
+    .wrap {
+      padding: 16px;
+      gap: 12px;
+    }
+    .panel {
+      padding: 14px;
+      border-radius: 14px;
+    }
+    .hint { display: block; }
+    button { font-size: 15px; padding: 9px 14px; }
+    .chip { font-size: 14px; padding: 7px 10px; }
+  }
+  @media (max-height: 600px) {
+    .sub { display: none; }
+    .panel { padding: 8px; }
+    button { padding: 6px 10px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel controls">
+    <button id="start">Restart</button>
+    <div style="display:flex; gap:6px; align-items:center;">
+      <button id="rew">⟲ -10s</button>
+      <button id="ff">+10s ⟲</button>
+    </div>
+    <span class="hint">Click center to play/pause • Drag ring to scrub</span>
+  </div>
+
+  <div class="panel canvas-panel">
+    <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
+  </div>
+
+  <div class="panel">
+    <div class="sub">Gongs (tap to jump)</div>
+    <div id="gongList" class="list"></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // Configuration - gong times in seconds
+  const gongTimes = ["04:43","09:23","14:06","18:48","23:30","28:12","32:54","37:38"].map(toSeconds);
+  const totalDuration = gongTimes[gongTimes.length - 1]; // 37:38
+  const GONG_DELAY = 3880; // 3.88 seconds in milliseconds
+
+  // Gong audio element
+  let gongAudio = null;
+
+  // Elements
+  const startBtn = document.getElementById('start');
+  const ffBtn = document.getElementById('ff');
+  const rewBtn = document.getElementById('rew');
+  const dial = document.getElementById('dial');
+  const ctx = dial.getContext('2d');
+  const gongList = document.getElementById('gongList');
+
+  // Timer state
+  let isPlaying = false;
+  let currentTime = 0;
+  let startTimestamp = 0;
+  let pausedTime = 0;
+  let rafId = null;
+  let dragging = false;
+  let lastGongIndex = -1;
+  let gongTimeouts = []; // Track active gong timeouts
+
+  // Drawing metrics
+  const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+  function resizeCanvas() {
+    const rect = dial.getBoundingClientRect();
+    const size = Math.min(rect.width, rect.height);
+    dial.width  = size * DPR;
+    dial.height = size * DPR;
+    draw();
+  }
+  new ResizeObserver(resizeCanvas).observe(dial);
+
+  // Helpers
+  function toSeconds(mmss) {
+    const [m, s] = mmss.split(':').map(Number);
+    return (m||0) * 60 + (s||0);
+  }
+
+  function fmt(secs) {
+    secs = Math.max(0, Math.floor(secs || 0));
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+
+  const TAU = Math.PI * 2;
+  const START_ANGLE = -Math.PI / 2;
+
+  function angleForTime(time, duration) {
+    return START_ANGLE + (time / Math.max(duration, 0.001)) * TAU;
+  }
+
+  function timeForAngle(angle, duration) {
+    const norm = (angle - START_ANGLE + TAU) % TAU;
+    return (norm / TAU) * duration;
+  }
+
+  function angleFromPointer(ev) {
+    const rect = dial.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * DPR;
+    const y = (ev.clientY - rect.top) * DPR;
+    const cx = dial.width / 2;
+    const cy = dial.height / 2;
+    return Math.atan2(y - cy, x - cx);
+  }
+
+  function distanceFromCenter(ev) {
+    const rect = dial.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * DPR;
+    const y = (ev.clientY - rect.top) * DPR;
+    const cx = dial.width / 2;
+    const cy = dial.height / 2;
+    return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+  }
+
+  // Gong audio
+  async function initAudioContext() {
+    if (!gongAudio) {
+      gongAudio = new Audio('individual_gong.mp3');
+      gongAudio.preload = 'auto';
+    }
+  }
+
+  function playGongSound() {
+    if (!gongAudio) return;
+    
+    // Create a new audio instance for each play to allow overlapping
+    const audio = gongAudio.cloneNode();
+    audio.currentTime = 0;
+    audio.play().catch(() => {}); // Ignore any play errors
+  }
+
+  // Play multiple gongs with delays
+  function playMultipleGongs(isLastGong = false) {
+    const numGongs = isLastGong ? 5 : 3;
+    
+    // Clear any existing gong timeouts
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    
+    // Play first gong immediately
+    playGongSound();
+    
+    // Schedule remaining gongs with 3.88s delay
+    for (let i = 1; i < numGongs; i++) {
+      const timeout = setTimeout(() => {
+        playGongSound();
+      }, GONG_DELAY * i);
+      gongTimeouts.push(timeout);
+    }
+  }
+
+  // Timer functions
+  function updateTime() {
+    if (isPlaying && !dragging) {
+      const elapsed = (performance.now() - startTimestamp) / 1000;
+      currentTime = Math.min(pausedTime + elapsed, totalDuration);
+      
+      // Check for gongs
+      const currentGongIndex = gongTimes.findIndex(t => 
+        currentTime >= t && currentTime < t + 0.5 && lastGongIndex < gongTimes.indexOf(t)
+      );
+      
+      if (currentGongIndex !== -1 && currentGongIndex > lastGongIndex) {
+        const isLastGong = currentGongIndex === gongTimes.length - 1;
+        playMultipleGongs(isLastGong);
+        lastGongIndex = currentGongIndex;
+      }
+      
+      if (currentTime >= totalDuration) {
+        pause();
+        currentTime = totalDuration;
+      }
+    }
+    
+    draw();
+    
+    if (isPlaying) {
+      rafId = requestAnimationFrame(updateTime);
+    }
+  }
+
+  function play() {
+    if (currentTime >= totalDuration) {
+      currentTime = 0;
+      pausedTime = 0;
+      lastGongIndex = -1;
+    }
+    
+    isPlaying = true;
+    startTimestamp = performance.now();
+    pausedTime = currentTime;
+    rafId = requestAnimationFrame(updateTime);
+    draw(); // Immediate update for icon
+  }
+
+  function pause() {
+    isPlaying = false;
+    pausedTime = currentTime;
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    draw(); // Immediate update for icon
+  }
+
+  // Event handlers
+  startBtn.addEventListener('click', async () => {
+    await initAudioContext();
+    currentTime = 0;
+    pausedTime = 0;
+    lastGongIndex = -1;
+    // Clear any pending gongs
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (!isPlaying) play();
+  });
+
+  ffBtn.addEventListener('click', () => {
+    currentTime = Math.min(currentTime + 10, totalDuration);
+    pausedTime = currentTime;
+    if (isPlaying) {
+      startTimestamp = performance.now();
+    }
+    draw();
+  });
+
+  rewBtn.addEventListener('click', () => {
+    currentTime = Math.max(currentTime - 10, 0);
+    pausedTime = currentTime;
+    // Reset gong tracking when going backward
+    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
+    // Clear any pending gongs
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) {
+      startTimestamp = performance.now();
+    }
+    draw();
+  });
+
+  window.addEventListener('keydown', async (e) => {
+    if (e.code === 'Space') { 
+      e.preventDefault(); 
+      await initAudioContext();
+      if (isPlaying) pause(); else play();
+    }
+  }, {capture:true});
+
+  // Canvas interactions
+  dial.addEventListener('pointerdown', async (e) => {
+    await initAudioContext();
+    const centerDistance = distanceFromCenter(e);
+    const radius = Math.min(dial.width, dial.height) * 0.38;
+
+    // Add small tolerance for mobile touch
+    const centerRadius = radius * 0.6;
+
+    if (centerDistance < centerRadius) {
+      // Click in center - toggle play/pause
+      if (isPlaying) pause(); else play();
+    } else {
+      // Click on outer ring - start dragging
+      dragging = true;
+      dial.setPointerCapture(e.pointerId);
+      scrub(e);
+    }
+  });
+
+  dial.addEventListener('pointermove', (e) => { 
+    if (dragging) scrub(e); 
+  });
+
+  function scrub(e) {
+    e.preventDefault();
+    const a = angleFromPointer(e);
+    const t = timeForAngle(a, totalDuration);
+    currentTime = Math.max(0, Math.min(totalDuration, t));
+    pausedTime = currentTime;
+    
+    // Reset gong tracking when scrubbing
+    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
+    // Clear any pending gongs
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    
+    // Update timestamp if playing to prevent time jump
+    if (isPlaying) {
+      startTimestamp = performance.now();
+    }
+    
+    draw();
+  }
+
+  function stopDragging(e){ 
+    if (dragging) {
+      dragging = false;
+      // Ensure pausedTime is current when we stop dragging
+      pausedTime = currentTime;
+      if (isPlaying) {
+        startTimestamp = performance.now();
+      }
+    }
+    try { dial.releasePointerCapture(e.pointerId); } catch(_){} 
+  }
+
+  dial.addEventListener('pointerup', stopDragging);
+  dial.addEventListener('pointercancel', stopDragging);
+  dial.addEventListener('pointerleave', stopDragging);
+
+  // Build gong list
+  function buildGongList() {
+    gongList.innerHTML = '';
+    gongTimes.forEach((sec, i) => {
+      const div = document.createElement('div');
+      div.className = 'chip';
+      div.textContent = `${i+1} • ${fmt(sec)}`;
+      div.title = 'Jump to ' + fmt(sec);
+      div.addEventListener('click', async () => { 
+        await initAudioContext();
+        currentTime = Math.min(sec, totalDuration);
+        pausedTime = currentTime;
+        lastGongIndex = i - 1;
+        // Clear any pending gongs
+        gongTimeouts.forEach(timeout => clearTimeout(timeout));
+        gongTimeouts = [];
+        draw();
+      });
+      gongList.appendChild(div);
+    });
+  }
+
+  // Drawing
+  function draw() {
+    const w = dial.width, h = dial.height;
+    ctx.clearRect(0,0,w,h);
+
+    const cx = w/2, cy = h/2;
+    const radius = Math.min(w,h) * 0.38;
+    const ring = Math.max(12, Math.min(w,h) * 0.05);
+
+    // Base ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, TAU);
+    ctx.lineWidth = ring;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.stroke();
+
+    const cur = Math.min(currentTime, totalDuration);
+
+    // Progress arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, START_ANGLE, angleForTime(cur, totalDuration));
+    ctx.lineWidth = ring;
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(110,231,255,0.9)';
+    ctx.stroke();
+
+    // Minor ticks (each minute)
+    const minutes = Math.ceil(totalDuration/60);
+    for (let m=0; m<=minutes; m++) {
+      const a = angleForTime(Math.min(m*60, totalDuration), totalDuration);
+      const inner = radius - ring*0.6;
+      const outer = radius + ring*0.1;
+      ctx.beginPath();
+      ctx.moveTo(cx + inner*Math.cos(a), cy + inner*Math.sin(a));
+      ctx.lineTo(cx + outer*Math.cos(a), cy + outer*Math.sin(a));
+      ctx.lineWidth = (m % 5 === 0) ? 3*DPR : 1.5*DPR;
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.stroke();
+    }
+
+    // Gong markers
+    gongTimes.forEach((t, i) => {
+      const a = angleForTime(Math.min(t, totalDuration), totalDuration);
+      const r0 = radius - ring*0.9;
+      const r1 = radius + ring*0.35;
+      ctx.beginPath();
+      ctx.moveTo(cx + r0*Math.cos(a), cy + r0*Math.sin(a));
+      ctx.lineTo(cx + r1*Math.cos(a), cy + r1*Math.sin(a));
+      ctx.lineWidth = 4*DPR;
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.stroke();
+
+      // Tiny label dot
+      const dotR = 5 * DPR;
+      ctx.beginPath();
+      ctx.arc(cx + (r1+8*DPR)*Math.cos(a), cy + (r1+8*DPR)*Math.sin(a), dotR, 0, TAU);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fill();
+    });
+
+    // Progress line indicator
+    const aNow = angleForTime(cur, totalDuration);
+    const lineStart = radius - ring*0.7;
+    const lineEnd = radius + ring*0.7;
+    
+    // Next gong text (outside the ring for mobile visibility)
+    const nextGongTime = gongTimes.find(t => t > currentTime);
+    if (nextGongTime && w > 300) { // Only show on larger screens
+      const remaining = nextGongTime - currentTime;
+      const line1 = "Next gong:";
+      const line2 = fmt(remaining);
+      const fontSize = Math.floor(w*0.032);
+      
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      
+      // Position outside the ring
+      const textRadius = radius + ring * 1.8;
+      const textX = cx + textRadius * Math.cos(aNow);
+      const textY = cy + textRadius * Math.sin(aNow);
+      
+      // Calculate background dimensions
+      const line1Metrics = ctx.measureText(line1);
+      const line2Metrics = ctx.measureText(line2);
+      const maxWidth = Math.max(line1Metrics.width, line2Metrics.width);
+      const lineHeight = fontSize * 1.2;
+      const totalHeight = lineHeight * 2;
+      
+      // Background for text readability
+      ctx.fillStyle = 'rgba(15,17,21,0.85)';
+      ctx.fillRect(textX - maxWidth/2 - 6, textY - totalHeight/2 - 3, maxWidth + 12, totalHeight + 6);
+      
+      // Render both lines
+      const textColor = remaining < 30 ? 'rgba(110,231,255,0.95)' : 'rgba(167,139,250,0.95)';
+      ctx.fillStyle = textColor;
+      ctx.fillText(line1, textX, textY - lineHeight/2);
+      ctx.font = `bold ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      ctx.fillText(line2, textX, textY + lineHeight/2);
+    }
+    
+    ctx.beginPath();
+    ctx.moveTo(cx + lineStart*Math.cos(aNow), cy + lineStart*Math.sin(aNow));
+    ctx.lineTo(cx + lineEnd*Math.cos(aNow), cy + lineEnd*Math.sin(aNow));
+    ctx.lineWidth = 4*DPR;
+    ctx.strokeStyle = 'rgba(110,231,255,1)';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Center play/pause area
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.6, 0, TAU);
+    ctx.fillStyle = 'rgba(15,17,21,0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2*DPR;
+    ctx.stroke();
+
+    // Center text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#e9eef7';
+    ctx.font = `bold ${Math.floor(w*0.055)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.fillText(fmt(cur), cx, cy - w*0.015);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = `${Math.floor(w*0.028)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.04);
+
+    // Play/pause icon
+    const iconSize = w * 0.028;
+    const iconY = cy + w*0.075;
+    ctx.fillStyle = 'rgba(110,231,255,0.85)';
+    if (isPlaying) {
+      // Pause icon
+      ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
+      ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
+    } else {
+      // Play icon
+      ctx.beginPath();
+      ctx.moveTo(cx - iconSize*0.6, iconY - iconSize*0.8);
+      ctx.lineTo(cx - iconSize*0.6, iconY + iconSize*0.8);
+      ctx.lineTo(cx + iconSize*0.8, iconY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Initialize
+  buildGongList();
+  resizeCanvas();
+  draw();
+})();
+</script>
+</body>
+</html>
