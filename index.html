@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Gong Timer — Animated UI (v2)</title>
 <link rel="preload" as="audio" href="./individual_gong.mp3">
 <link rel="preload" as="audio" href="./final_gongs.mp3">
@@ -81,10 +81,11 @@
      Layout & Panels (glass + subtle animation)
      ===================== */
   .wrap {
-    height: 100vh;
+    height: 100dvh;
     max-width: 980px;
     margin: 0 auto;
     padding: 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -172,7 +173,7 @@
 
   .corner-btn {
     position: absolute;
-    bottom: 35px;
+    bottom: max(35px, calc(35px + env(safe-area-inset-bottom)));
     z-index: 3;
     padding: 8px;
     font-size: var(--font-lg);
@@ -197,13 +198,13 @@
     right: 12px;
   }
 
-  canvas { 
+  canvas {
     width: 100%;
     height: 100%;
-    max-width: min(100%, 100vh - 300px);
-    max-height: min(100%, 100vh - 300px);
-    display: block; 
-    touch-action: none; 
+    max-width: min(100%, 100dvh - 300px);
+    max-height: min(100%, 100dvh - 300px);
+    display: block;
+    touch-action: none;
     cursor: pointer;
     object-fit: contain;
     filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
