@@ -18,7 +18,7 @@
     --font-lg: 20px;      /* corner buttons */
     --font-xl: 25px;      /* paused note */
     --font-2xl: 35px;     /* next gong display */
-    --font-3xl: 60px;     /* time text */
+    --font-3xl: 55px;     /* time text */
     --font-4xl: 80px;     /* next gong display */
 
     /* Canvas font scale factors (multiplied by canvas width) */
@@ -152,7 +152,7 @@
   }
   .next-gong-top {
     position: absolute;
-    top: 12px;
+    top: 2%;
     left: 50%;
     transform: translateX(-50%);
     color: var(--accent2);
@@ -173,14 +173,13 @@
 
   .corner-btn {
     position: absolute;
-    bottom: max(35px, calc(35px + env(safe-area-inset-bottom)));
+    bottom: max(20px, calc(20px + env(safe-area-inset-bottom)));
     z-index: 3;
-    padding: 8px;
     font-size: var(--font-lg);
     width: 90px;
     height: 90px;
     display: flex;
-    align-items: center;
+    align-items: end;
     justify-content: center;
     background: none;
     border: none;
