@@ -3,89 +3,86 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Gong Timer — Interactive Player (Fixed Indicator)</title>
+<title>Gong Timer — Animated UI (v2)</title>
 <link rel="preload" as="audio" href="./individual_gong.mp3">
 <link rel="preload" as="audio" href="./final_gongs.mp3">
 <style>
+  /* =====================
+     Theme & Base Styles
+     ===================== */
   :root {
-    --bg: #0f1115;
+    --bg: #0b0e14;        /* deeper background */
+    --bg2: #0f1420;       /* panel contrast */
     --ink: #e9eef7;
-    --muted: #768293;
+    --muted: #8c99ad;
     --accent: #6ee7ff;
-    --accent2:#449fef;
+    --accent2: #449fef;
+    --glow: 0 0 24px rgba(110, 231, 255, .25);
   }
   html, body {
     height: 100%;
-    background: var(--bg);
+    background: radial-gradient(1200px 800px at 20% -10%, rgba(68,159,239,.15), transparent 60%),
+                radial-gradient(1400px 900px at 110% 120%, rgba(110,231,255,.12), transparent 60%),
+                linear-gradient(180deg, var(--bg), #07090d 60%);
     color: var(--ink);
     margin: 0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
     overflow: hidden;
   }
+  * { box-sizing: border-box; }
+
+  /* =====================
+     Layout & Panels (glass + subtle animation)
+     ===================== */
   .wrap {
     height: 100vh;
-    max-width: 920px;
+    max-width: 980px;
     margin: 0 auto;
-    padding: 8px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    box-sizing: border-box;
+    gap: 14px;
   }
   .panel {
-    background: rgba(255,255,255,0.04);
+    position: relative;
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
     border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    padding: 10px;
-    box-sizing: border-box;
+    border-radius: 16px;
+    padding: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.04);
+    backdrop-filter: saturate(120%) blur(6px);
+    animation: panelIn .6s cubic-bezier(.2,.8,.2,1) both;
   }
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
+  @keyframes panelIn { from { transform: translateY(8px); opacity: 0 } }
+
+
+  /* =====================
+     Buttons (micro‑interaction)
+     ===================== */
   button {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
+    appearance: none;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.14);
     color: var(--ink);
-    padding: 8px 12px;
-    border-radius: 10px;
+    padding: 10px 14px;
+    border-radius: 12px;
     cursor: pointer;
-    font-weight: 600;
-    font-size: 14px;
-  }
-  button:active { transform: translateY(1px); }
-  .time-readout {
-    font-variant-numeric: tabular-nums;
-    font-size: 24px;
     font-weight: 700;
-    letter-spacing: .5px;
+    font-size: 14px;
+    letter-spacing: .2px;
+    transition: transform .08s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
   }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
-  .list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    gap: 6px;
-  }
-  .chip {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 999px;
-    padding: 6px 8px;
-    font-variant-numeric: tabular-nums;
-    text-align: center;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  .hint { 
-    color: var(--muted); 
-    font-size: 11px; 
-    text-align: center;
-    display: none;
-  }
+  button:hover { border-color: rgba(110,231,255,.5); box-shadow: var(--glow); }
+  button:active { transform: translateY(1px) scale(.99); }
+  .btn-accent { color: #061014; background: linear-gradient(180deg, rgba(110,231,255,.95), rgba(68,159,239,.9)); border-color: rgba(110,231,255,.85); box-shadow: 0 6px 24px rgba(110,231,255,.3); }
+  .btn-accent:hover { filter: saturate(115%); }
+  .btn-disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-disabled:hover { border-color: rgba(255,255,255,0.14); box-shadow: none; }
+
+
+  /* =====================
+     Canvas Stage
+     ===================== */
   .canvas-panel {
     flex: 1;
     min-height: 0;
@@ -94,79 +91,94 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    overflow: hidden;
   }
   .next-gong-top {
     position: absolute;
-    top: 10px;
+    top: 12px;
     left: 50%;
     transform: translateX(-50%);
     color: var(--accent2);
     font-size: 24px;
-    font-weight: 700;
+    font-weight: 800;
     text-align: center;
-    z-index: 1;
+    z-index: 2;
     font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 0 rgba(0,0,0,.4);
+    transition: color .3s ease, transform .4s cubic-bezier(.2,.8,.2,1);
   }
-  .paused-note {
-    font-size: 24px; /* match next-gong text size */
-    font-weight: 600;
-    color: var(--muted);
-    margin-top: 2px;
+  .next-gong-top.pulse { transform: translateX(-50%) scale(1.02); }
+  .paused-note { font-size: 20px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .time-text { font-size: 40px; font-weight: 800; }
+
+  .corner-btn {
+    position: absolute;
+    bottom: 12px;
+    z-index: 3;
+    padding: 8px 12px;
+    font-size: 13px;
   }
+  .corner-btn-left {
+    left: 12px;
+  }
+  .corner-btn-right {
+    right: 12px;
+  }
+
   canvas { 
     width: 100%;
     height: 100%;
-    max-width: min(100%, 100vh - 280px);
-    max-height: min(100%, 100vh - 280px);
+    max-width: min(100%, 100vh - 300px);
+    max-height: min(100%, 100vh - 300px);
     display: block; 
     touch-action: none; 
     cursor: pointer;
     object-fit: contain;
+    filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
   }
-  .next-gong {
+
+  /* =====================
+     Gong list chips
+     ===================== */
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 8px;
+  }
+  .chip {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    padding: 7px 10px;
+    font-variant-numeric: tabular-nums;
     text-align: center;
-    margin-top: 8px;
-    color: var(--accent2);
+    cursor: pointer;
     font-size: 14px;
-    font-weight: 600;
+    transition: transform .12s ease, box-shadow .25s ease, border-color .2s ease;
+    user-select: none;
   }
-  @media (min-width: 640px) {
-    .wrap {
-      padding: 16px;
-      gap: 12px;
-    }
-    .panel {
-      padding: 14px;
-      border-radius: 14px;
-    }
-    .hint { display: block; }
-    button { font-size: 15px; padding: 9px 14px; }
-    .chip { font-size: 14px; padding: 7px 10px; }
-  }
-  @media (max-height: 600px) {
+  .chip:hover { transform: translateY(-1px); border-color: rgba(110,231,255,.6); box-shadow: var(--glow); }
+  .chip:active { transform: translateY(0); }
+
+  @media (max-height: 640px) {
     .sub { display: none; }
-    .panel { padding: 8px; }
-    button { padding: 6px 10px; font-size: 13px; }
+    .panel { padding: 10px; }
+    button { padding: 8px 12px; font-size: 13px; }
   }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="panel controls">
-    <button id="start">Restart</button>
-    <div style="display:flex; gap:6px; align-items:center;">
-      <button id="rew">⟲ -10s</button>
-      <button id="ff">+10s ⟲</button>
-    </div>
-    <span class="hint">Click center to play/pause • Drag ring to rotate dial (indicator stays at top)</span>
-  </div>
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
+    <button id="rew" class="corner-btn corner-btn-left">⟲ - 30s</button>
+    <button id="ff" class="corner-btn corner-btn-right">+ 30s ⟲</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
-  <div class="panel">
+  <div class="panel" style="display: none;">
     <div class="sub">Gongs (tap to jump)</div>
     <div id="gongList" class="list"></div>
   </div>
@@ -190,7 +202,6 @@
   // =====================
   // DOM
   // =====================
-  const startBtn = document.getElementById('start');
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
   const dial = document.getElementById('dial');
@@ -202,7 +213,8 @@
   // State
   // =====================
   let isPlaying = false;
-  let currentTime = 0;
+  let currentTime = 0;      // logic time (audio/triggers)
+  let displayTime = 0;      // eased UI time
   let startTimestamp = 0;
   let pausedTime = 0;
   let rafId = null;
@@ -216,11 +228,18 @@
   let dragStartAngle = 0; // angle at pointerdown
   let dragStartTime = 0;  // time at pointerdown
 
+  // Easing factor for displayTime (0..1). Higher = snappier.
+  const EASE = 0.18;
+
   // Set scrub direction preference: true => clockwise increases time
   const SCRUB_CLOCKWISE_INCREASES = true;
 
   // Drawing metrics
   const DPR = Math.max(1, window.devicePixelRatio || 1);
+
+  // Pulse FX on each gong
+  const pulses = []; // {t: timestamp(ms), life: 800}
+  const PULSE_LIFE = 820;
 
   // =====================
   // Utilities
@@ -300,12 +319,21 @@
     if (!audioPrimed || !gongPool.length) return;
     const a = gongPool[gongIndex];
     gongIndex = (gongIndex + 1) % gongPool.length;
+
+    // Add pulse animation for each gong sound
+    pulses.push({ t: performance.now() });
+
     try { a.currentTime = 0; a.play().catch(e => console.warn('play() blocked:', e)); }
     catch (e) { console.warn('play error:', e); }
   }
   function playMultipleGongs(isLastGong = false) {
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
+
+    // Header nudge
+    nextGongDisplay.classList.add('pulse');
+    setTimeout(() => nextGongDisplay.classList.remove('pulse'), 280);
+
     if (isLastGong && finalGongAudio) {
       try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
       catch (e) { console.warn('final gong play error:', e); }
@@ -337,6 +365,7 @@
         gongTimeouts.forEach(timeout => clearTimeout(timeout));
         gongTimeouts = [];
         if (isPlaying) startTimestamp = performance.now();
+        updateButtonStates();
         draw();
       });
       gongList.appendChild(div);
@@ -350,6 +379,8 @@
     if (isPlaying && !dragging) {
       const elapsed = (performance.now() - startTimestamp) / 1000;
       currentTime = Math.min(pausedTime + elapsed, totalDuration);
+
+      // Trigger gongs when crossing timestamps
       const currentGongIndex = gongTimes.findIndex(t => currentTime >= t && currentTime < t + 0.5 && lastGongIndex < gongTimes.indexOf(t));
       if (currentGongIndex !== -1 && currentGongIndex > lastGongIndex) {
         const isLastGong = currentGongIndex === gongTimes.length - 1;
@@ -361,6 +392,12 @@
         currentTime = totalDuration;
       }
     }
+
+    // Smooth UI easing toward currentTime
+    const delta = currentTime - displayTime;
+    displayTime += delta * (dragging ? 0.35 : EASE);
+    if (Math.abs(delta) < 0.015) displayTime = currentTime; // snap when close
+
     draw();
     if (isPlaying) rafId = requestAnimationFrame(updateTime);
   }
@@ -395,30 +432,28 @@
   // =====================
   // Input Handlers
   // =====================
-  startBtn.addEventListener('click', async () => {
-    await primeAudioIfNeeded();
-    currentTime = 0; pausedTime = 0; lastGongIndex = -1;
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (!isPlaying) play();
-  });
   ffBtn.addEventListener('click', () => {
-    currentTime = Math.min(currentTime + 10, totalDuration);
+    currentTime = Math.min(currentTime + 30, totalDuration);
     pausedTime = currentTime;
     if (isPlaying) startTimestamp = performance.now();
+    updateButtonStates();
     draw();
   });
   rewBtn.addEventListener('click', () => {
-    currentTime = Math.max(currentTime - 10, 0);
+    if (currentTime === 0) return;
+    currentTime = Math.max(currentTime - 30, 0);
     pausedTime = currentTime;
     lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
+    updateButtonStates();
     draw();
   });
   window.addEventListener('keydown', async (e) => {
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
+    if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; updateButtonStates(); draw(); }
+    if (e.key === 'ArrowLeft') { currentTime = Math.max(currentTime - 5, 0); pausedTime = currentTime; updateButtonStates(); draw(); }
   }, {capture:true});
 
   // Canvas interactions — fixed indicator, rotate dial while dragging
@@ -457,6 +492,7 @@
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
+    updateButtonStates();
     draw();
   });
   function stopDragging(e){ 
@@ -470,6 +506,16 @@
   // =====================
   // Drawing
   // =====================
+  function updateButtonStates() {
+    if (currentTime === 0) {
+      rewBtn.classList.add('btn-disabled');
+      rewBtn.disabled = true;
+    } else {
+      rewBtn.classList.remove('btn-disabled');
+      rewBtn.disabled = false;
+    }
+  }
+
   function draw() {
     const w = dial.width, h = dial.height;
     ctx.clearRect(0,0,w,h);
@@ -477,23 +523,43 @@
     const radius = Math.min(w,h) * 0.38;
     const ring = Math.max(12, Math.min(w,h) * 0.05);
 
-    // Base ring
+    // Soft ambient halo
+    const halo = ctx.createRadialGradient(cx, cy, radius*0.6, cx, cy, radius*1.4);
+    halo.addColorStop(0, 'rgba(110,231,255,.04)');
+    halo.addColorStop(1, 'rgba(110,231,255,0)');
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius*1.4, 0, TAU);
+    ctx.fill();
+
+    // Base ring (with gradient)
+    const baseGrad = ctx.createLinearGradient(0, 0, 0, h);
+    baseGrad.addColorStop(0, 'rgba(255,255,255,0.10)');
+    baseGrad.addColorStop(1, 'rgba(255,255,255,0.05)');
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, TAU);
     ctx.lineWidth = ring;
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.strokeStyle = baseGrad;
+    ctx.lineCap = 'butt';
     ctx.stroke();
 
-    const cur = Math.min(currentTime, totalDuration);
+    const cur = Math.min(displayTime, totalDuration);
     const frac = cur / Math.max(totalDuration, 0.001);
 
-    // Progress arc: from top anticlockwise
+    // Progress arc (gradient + glow)
+    const progGrad = ctx.createLinearGradient(0, 0, w, 0);
+    progGrad.addColorStop(0, 'rgba(110,231,255,0.95)');
+    progGrad.addColorStop(1, 'rgba(68,159,239,0.95)');
+    ctx.save();
+    ctx.shadowColor = 'rgba(110,231,255,0.25)';
+    ctx.shadowBlur = 18 * DPR;
     ctx.beginPath();
     ctx.arc(cx, cy, radius, START_ANGLE, START_ANGLE - frac*TAU, true);
     ctx.lineWidth = ring;
     ctx.lineCap = 'butt';
-    ctx.strokeStyle = isPlaying ? 'rgba(110,231,255,0.9)' : 'rgba(148,163,184,0.6)';
+    ctx.strokeStyle = isPlaying ? progGrad : 'rgba(148,163,184,0.55)';
     ctx.stroke();
+    ctx.restore();
 
     // Rotate dial graphics so current time aligns with indicator
     ctx.save();
@@ -504,8 +570,8 @@
     const minutes = Math.ceil(totalDuration/60);
     for (let m=0; m<=minutes; m++) {
       const a = START_ANGLE + Math.min(m*60, totalDuration)/Math.max(totalDuration,0.001)*TAU;
-      const inner = radius - ring*0.6;
-      const outer = radius + ring*0.1;
+      const inner = radius - ring*0.62;
+      const outer = radius + ring*0.08;
       ctx.beginPath();
       ctx.moveTo(inner*Math.cos(a), inner*Math.sin(a));
       ctx.lineTo(outer*Math.cos(a), outer*Math.sin(a));
@@ -525,7 +591,7 @@
       ctx.lineWidth = 1*DPR;
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
       ctx.stroke();
-      const dotR = 5 * DPR;
+      const dotR = 2 * DPR;
       ctx.beginPath();
       ctx.arc((r1+8*DPR)*Math.cos(a), (r1+8*DPR)*Math.sin(a), dotR, 0, TAU);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
@@ -565,16 +631,33 @@
 
     ctx.restore(); // end rotated dial graphics
 
-    // Fixed indicator line at the top
+    // Pulse FX rings (expand & fade)
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      const age = performance.now() - pulses[i].t;
+      if (age > PULSE_LIFE) { pulses.splice(i,1); continue; }
+      const k = age / PULSE_LIFE; // 0..1
+      const r = radius + ring*0.75 + k * (ring*1.6);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.strokeStyle = `rgba(110,231,255,${0.25 * (1 - k)})`;
+      ctx.lineWidth = 2 * DPR * (1 - k);
+      ctx.stroke();
+    }
+
+    // Fixed indicator line at the top (glowing)
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
+    ctx.save();
+    ctx.shadowColor = 'rgba(110,231,255,0.45)';
+    ctx.shadowBlur = 10 * DPR;
     ctx.beginPath();
     ctx.moveTo(cx + lineStart*Math.cos(START_ANGLE), cy + lineStart*Math.sin(START_ANGLE));
     ctx.lineTo(cx + lineEnd*Math.cos(START_ANGLE), cy + lineEnd*Math.sin(START_ANGLE));
-    ctx.lineWidth = 1*DPR;
+    ctx.lineWidth = 2*DPR;
     ctx.strokeStyle = 'rgba(110,231,255,1)';
-    ctx.lineCap = 'round';
+    ctx.lineCap = 'butt';
     ctx.stroke();
+    ctx.restore();
 
     // Next gong display
     const nextGongTime = gongTimes.find(t => t > currentTime);
@@ -584,8 +667,8 @@
       const m = Math.floor(remainingSecs / 60);
       const s = remainingSecs % 60;
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
-      const text = `Next gong will play in ${timeText}`;
-      const pausedNote = !isPlaying ? '<div class="paused-note">(paused)</div>' : '';
+      const text = `<div class="paused-note">next gong in</div> <span class="time-text">${timeText}</span>`;
+      const pausedNote = !isPlaying ? `<div class="paused-note">${currentTime === 0 ? '(tap ▶ to start)' : '(paused)'}</div>` : '';
       nextGongDisplay.innerHTML = text + pausedNote;
       if (isPlaying) {
         nextGongDisplay.style.color = remaining < 30 ? 'var(--ink)' : 'var(--accent)';
@@ -597,12 +680,15 @@
       nextGongDisplay.style.display = 'none';
     }
 
-    // Center play/pause area
+    // Center play/pause area (inner glass)
     ctx.beginPath();
     ctx.arc(cx, cy, radius * 0.6, 0, TAU);
-    ctx.fillStyle = 'rgba(15,17,21,0.85)';
+    const innerGrad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 0.6);
+    innerGrad.addColorStop(0, 'rgba(15,17,21,0.8)');
+    innerGrad.addColorStop(1, 'rgba(15,17,21,0.92)');
+    ctx.fillStyle = innerGrad;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 2*DPR;
     ctx.stroke();
 
@@ -610,16 +696,18 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#e9eef7';
-    ctx.font = `bold ${Math.floor(w*0.055)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.font = `bold ${Math.floor(w*0.075)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.fillText(fmt(cur), cx, cy - w*0.015);
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = `${Math.floor(w*0.028)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.04);
 
-    // Play/pause icon
+    // Play/pause icon (with bounce when toggled)
     const iconSize = w * 0.028;
-    const iconY = cy + w*0.075 + 25; // moved to +25
-    ctx.fillStyle = 'rgba(110,231,255,0.85)';
+    const iconY = cy + w*0.075 + 25;
+    ctx.save();
+    ctx.translate(0, isPlaying ? 0 : 0);
+    ctx.fillStyle = 'rgba(110,231,255,0.9)';
     if (isPlaying) {
       ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
       ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
@@ -631,12 +719,14 @@
       ctx.closePath();
       ctx.fill();
     }
+    ctx.restore();
   }
 
   // =====================
   // Init
   // =====================
   buildGongList();
+  updateButtonStates();
   resizeCanvas();
   draw();
 
