@@ -165,9 +165,10 @@
     transition: color .3s ease, transform .4s cubic-bezier(.2,.8,.2,1);
   }
   .next-gong-top.pulse { transform: translateX(-50%) scale(1.02); }
-  .next-gong-text { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 2px; }
-  .paused-note { font-size: var(--font-3xl); font-weight: 800; color: var(--muted); margin-top: -10px; }
-  .time-text { font-size: var(--font-3xl); font-weight: 800; }
+  .next-gong-text { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 10px; }
+  .paused-note { font-size: var(--font-3xl); font-weight: 800; color: var(--muted); margin-top: -20px; }
+  .tap-note { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 0px; }
+  .time-text { font-size: var(--font-3xl); font-weight: 800; margin-top: -10px; display: block; }
 
   .corner-btn {
     position: absolute;
@@ -1003,7 +1004,8 @@
       const s = remainingSecs % 60;
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
       const text = `<div class="next-gong-text">next gong in</div> <span class="time-text">${timeText}</span>`;
-      const pausedNote = !isPlaying ? `<div class="paused-note">${currentTime === 0 ? 'tap ▶' : 'paused'}</div>` : '';
+      const pausedNote = !isPlaying ?
+        (currentTime === 0 ? `<div class="tap-note">tap ▶ to start</div>` : `<div class="paused-note">paused</div>`) : '';
       nextGongDisplay.innerHTML = text + pausedNote;
       if (isPlaying) {
         // Gradually transition from accent to ink color as time gets closer
