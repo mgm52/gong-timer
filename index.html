@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-<title>Gong Timer — Interactive Player</title>
+<title>Gong Timer — Interactive Player (Fixed Indicator)</title>
 <link rel="preload" as="audio" href="./individual_gong.mp3">
 <link rel="preload" as="audio" href="./final_gongs.mp3">
 <style>
@@ -107,6 +107,12 @@
     z-index: 1;
     font-variant-numeric: tabular-nums;
   }
+  .paused-note {
+    font-size: 24px; /* match next-gong text size */
+    font-weight: 600;
+    color: var(--muted);
+    margin-top: 2px;
+  }
   canvas { 
     width: 100%;
     height: 100%;
@@ -152,7 +158,7 @@
       <button id="rew">⟲ -10s</button>
       <button id="ff">+10s ⟲</button>
     </div>
-    <span class="hint">Click center to play/pause • Drag ring to scrub</span>
+    <span class="hint">Click center to play/pause • Drag ring to rotate dial (indicator stays at top)</span>
   </div>
 
   <div class="panel canvas-panel">
@@ -168,19 +174,22 @@
 
 <script>
 (() => {
-  // Configuration - gong times in seconds
+  // =====================
+  // Config & Audio Assets
+  // =====================
   const gongTimes = ["04:43","09:23","14:06","18:48","23:30","28:12","32:54","37:38"].map(toSeconds);
   const totalDuration = gongTimes[gongTimes.length - 1]; // 37:38
   const GONG_DELAY = 3880; // 3.88 seconds in milliseconds
 
-  // Audio pool (replaces single gongAudio + cloneNode)
-  const GONG_POOL_SIZE = 5; // we sometimes need overlapping rings
+  const GONG_POOL_SIZE = 5; // overlapping rings
   const gongPool = [];
   let gongIndex = 0;
   let audioPrimed = false;
   let finalGongAudio = null;
 
-  // Elements
+  // =====================
+  // DOM
+  // =====================
   const startBtn = document.getElementById('start');
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
@@ -189,7 +198,9 @@
   const gongList = document.getElementById('gongList');
   const nextGongDisplay = document.getElementById('nextGongDisplay');
 
-  // Timer state
+  // =====================
+  // State
+  // =====================
   let isPlaying = false;
   let currentTime = 0;
   let startTimestamp = 0;
@@ -197,27 +208,27 @@
   let rafId = null;
   let dragging = false;
   let lastGongIndex = -1;
-  let gongTimeouts = []; // Track active gong timeouts
-  let pointerX = 0; // canvas-space (device pixels)
+  let gongTimeouts = [];
+  let pointerX = 0;
   let pointerY = 0;
+
+  // Drag rotation state (for fixed indicator UX)
+  let dragStartAngle = 0; // angle at pointerdown
+  let dragStartTime = 0;  // time at pointerdown
+
+  // Set scrub direction preference: true => clockwise increases time
+  const SCRUB_CLOCKWISE_INCREASES = true;
 
   // Drawing metrics
   const DPR = Math.max(1, window.devicePixelRatio || 1);
 
-  function resizeCanvas() {
-    const rect = dial.getBoundingClientRect();
-    dial.width  = rect.width  * DPR;
-    dial.height = rect.height * DPR;
-    draw();
-  }
-  new ResizeObserver(resizeCanvas).observe(dial);
-
-  // Helpers
+  // =====================
+  // Utilities
+  // =====================
   function toSeconds(mmss) {
     const [m, s] = mmss.split(':').map(Number);
     return (m||0) * 60 + (s||0);
   }
-
   function fmt(secs) {
     secs = Math.max(0, Math.floor(secs || 0));
     const m = Math.floor(secs / 60);
@@ -226,17 +237,20 @@
   }
 
   const TAU = Math.PI * 2;
-  const START_ANGLE = -Math.PI / 2;
+  const START_ANGLE = -Math.PI / 2; // fixed indicator at top
 
   function angleForTime(time, duration) {
     return START_ANGLE + (time / Math.max(duration, 0.001)) * TAU;
   }
-
   function timeForAngle(angle, duration) {
     const norm = (angle - START_ANGLE + TAU) % TAU;
     return (norm / TAU) * duration;
   }
-
+  function normAngle(a) {
+    let x = (a + Math.PI) % (2*Math.PI);
+    if (x < 0) x += 2*Math.PI;
+    return x - Math.PI; // -> [-PI, PI)
+  }
   function angleFromPointer(ev) {
     const rect = dial.getBoundingClientRect();
     const x = ev.clientX - rect.left;
@@ -245,7 +259,6 @@
     const cy = rect.height / 2;
     return Math.atan2(y - cy, x - cx);
   }
-
   function distanceFromCenter(ev) {
     const rect = dial.getBoundingClientRect();
     const x = ev.clientX - rect.left;
@@ -255,6 +268,9 @@
     return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
   }
 
+  // =====================
+  // Audio setup
+  // =====================
   function createGongPool() {
     if (gongPool.length) return; // already created
     for (let i = 0; i < GONG_POOL_SIZE; i++) {
@@ -262,252 +278,50 @@
       a.preload = 'auto';
       gongPool.push(a);
     }
-
-    // Create final gong audio
     finalGongAudio = new Audio('./final_gongs.mp3');
     finalGongAudio.preload = 'auto';
   }
-
-  // Call this from a user gesture to unlock audio on mobile.
   async function primeAudioIfNeeded() {
     if (audioPrimed) return;
     createGongPool();
     try {
-      // Prime each element with a muted play→pause inside the gesture.
       for (const a of gongPool) {
-        a.muted = true;
-        await a.play();
-        a.pause();
-        a.currentTime = 0;
-        a.muted = false;
+        a.muted = true; await a.play(); a.pause(); a.currentTime = 0; a.muted = false;
       }
-
-      // Prime final gong audio
       if (finalGongAudio) {
-        finalGongAudio.muted = true;
-        await finalGongAudio.play();
-        finalGongAudio.pause();
-        finalGongAudio.currentTime = 0;
-        finalGongAudio.muted = false;
+        finalGongAudio.muted = true; await finalGongAudio.play(); finalGongAudio.pause(); finalGongAudio.currentTime = 0; finalGongAudio.muted = false;
       }
-
       audioPrimed = true;
     } catch (err) {
       console.warn('Audio prime failed:', err);
     }
   }
-
-  // Use a round-robin source so overlapping gongs can play.
   function playGongSound() {
     if (!audioPrimed || !gongPool.length) return;
     const a = gongPool[gongIndex];
     gongIndex = (gongIndex + 1) % gongPool.length;
-    try {
-      a.currentTime = 0;
-      // Avoid awaiting; just fire and log if it fails.
-      a.play().catch(e => console.warn('play() blocked:', e));
-    } catch (e) {
-      console.warn('play error:', e);
-    }
+    try { a.currentTime = 0; a.play().catch(e => console.warn('play() blocked:', e)); }
+    catch (e) { console.warn('play error:', e); }
   }
-
-  // Play multiple gongs with delays
   function playMultipleGongs(isLastGong = false) {
-    // Clear any existing gong timeouts
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
-
     if (isLastGong && finalGongAudio) {
-      // Play final gongs audio file
-      try {
-        finalGongAudio.currentTime = 0;
-        finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e));
-      } catch (e) {
-        console.warn('final gong play error:', e);
-      }
+      try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
+      catch (e) { console.warn('final gong play error:', e); }
     } else {
-      // Play 3 individual gongs for non-final gongs
       const numGongs = 3;
-
-      // Play first gong immediately
       playGongSound();
-
-      // Schedule remaining gongs with 3.88s delay
       for (let i = 1; i < numGongs; i++) {
-        const timeout = setTimeout(() => {
-          playGongSound();
-        }, GONG_DELAY * i);
+        const timeout = setTimeout(() => playGongSound(), GONG_DELAY * i);
         gongTimeouts.push(timeout);
       }
     }
   }
 
-  // Timer functions
-  function updateTime() {
-    if (isPlaying && !dragging) {
-      const elapsed = (performance.now() - startTimestamp) / 1000;
-      currentTime = Math.min(pausedTime + elapsed, totalDuration);
-      
-      // Check for gongs
-      const currentGongIndex = gongTimes.findIndex(t => 
-        currentTime >= t && currentTime < t + 0.5 && lastGongIndex < gongTimes.indexOf(t)
-      );
-      
-      if (currentGongIndex !== -1 && currentGongIndex > lastGongIndex) {
-        const isLastGong = currentGongIndex === gongTimes.length - 1;
-        playMultipleGongs(isLastGong);
-        lastGongIndex = currentGongIndex;
-      }
-      
-      if (currentTime >= totalDuration) {
-        pause();
-        currentTime = totalDuration;
-      }
-    }
-    
-    draw();
-    
-    if (isPlaying) {
-      rafId = requestAnimationFrame(updateTime);
-    }
-  }
-
-  function play() {
-    if (currentTime >= totalDuration) {
-      currentTime = 0;
-      pausedTime = 0;
-      lastGongIndex = -1;
-    }
-    
-    isPlaying = true;
-    startTimestamp = performance.now();
-    pausedTime = currentTime;
-    rafId = requestAnimationFrame(updateTime);
-    draw(); // Immediate update for icon
-  }
-
-  function pause() {
-    isPlaying = false;
-    pausedTime = currentTime;
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
-    draw(); // Immediate update for icon
-  }
-
-  // Event handlers
-  startBtn.addEventListener('click', async () => {
-    await primeAudioIfNeeded();
-    currentTime = 0;
-    pausedTime = 0;
-    lastGongIndex = -1;
-    // Clear any pending gongs
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (!isPlaying) play();
-  });
-
-  ffBtn.addEventListener('click', () => {
-    currentTime = Math.min(currentTime + 10, totalDuration);
-    pausedTime = currentTime;
-    if (isPlaying) {
-      startTimestamp = performance.now();
-    }
-    draw();
-  });
-
-  rewBtn.addEventListener('click', () => {
-    currentTime = Math.max(currentTime - 10, 0);
-    pausedTime = currentTime;
-    // Reset gong tracking when going backward
-    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
-    // Clear any pending gongs
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) {
-      startTimestamp = performance.now();
-    }
-    draw();
-  });
-
-  window.addEventListener('keydown', async (e) => {
-    if (e.code === 'Space') {
-      e.preventDefault();
-      await primeAudioIfNeeded();
-      if (isPlaying) pause(); else play();
-    }
-  }, {capture:true});
-
-  // Canvas interactions
-  dial.addEventListener('pointerdown', async (e) => {
-    await primeAudioIfNeeded();
-    const centerDistance = distanceFromCenter(e);
-    const rect = dial.getBoundingClientRect();
-    const cssRadius = Math.min(rect.width, rect.height) * 0.38;
-    const centerRadius = cssRadius * 0.6;
-
-    if (centerDistance < centerRadius) {
-      // Click in center - toggle play/pause
-      if (isPlaying) pause(); else play();
-    } else {
-      // Click on outer ring - start dragging
-      dragging = true;
-      const r = dial.getBoundingClientRect();
-      pointerX = (e.clientX - r.left) * DPR;
-      pointerY = (e.clientY - r.top)  * DPR;
-      dial.setPointerCapture(e.pointerId);
-      scrub(e);
-    }
-  });
-
-  dial.addEventListener('pointermove', (e) => {
-    if (dragging) {
-      const r = dial.getBoundingClientRect();
-      pointerX = (e.clientX - r.left) * DPR;
-      pointerY = (e.clientY - r.top)  * DPR;
-      scrub(e);
-    }
-  });
-
-  function scrub(e) {
-    e.preventDefault();
-    const a = angleFromPointer(e);
-    const t = timeForAngle(a, totalDuration);
-    currentTime = Math.max(0, Math.min(totalDuration, t));
-    pausedTime = currentTime;
-    
-    // Reset gong tracking when scrubbing
-    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
-    // Clear any pending gongs
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    
-    // Update timestamp if playing to prevent time jump
-    if (isPlaying) {
-      startTimestamp = performance.now();
-    }
-    
-    draw();
-  }
-
-  function stopDragging(e){ 
-    if (dragging) {
-      dragging = false;
-      // Ensure pausedTime is current when we stop dragging
-      pausedTime = currentTime;
-      if (isPlaying) {
-        startTimestamp = performance.now();
-      }
-    }
-    try { dial.releasePointerCapture(e.pointerId); } catch(_){} 
-  }
-
-  dial.addEventListener('pointerup', stopDragging);
-  dial.addEventListener('pointercancel', stopDragging);
-  dial.addEventListener('pointerleave', stopDragging);
-
-  // Build gong list
+  // =====================
+  // Build gong list (defined BEFORE use)
+  // =====================
   function buildGongList() {
     gongList.innerHTML = '';
     gongTimes.forEach((sec, i) => {
@@ -517,28 +331,148 @@
       div.title = 'Jump to ' + fmt(sec);
       div.addEventListener('click', async () => {
         await primeAudioIfNeeded();
-        // Seek slightly before the target so we definitely pass through the gong
         currentTime = Math.min(Math.max(sec - 0.75, 0), totalDuration);
         pausedTime = currentTime;
-        lastGongIndex = i - 1; // "previous gong" so this one will fire naturally
-        // Clear any pending gongs
+        lastGongIndex = i - 1; // so this one will fire naturally
         gongTimeouts.forEach(timeout => clearTimeout(timeout));
         gongTimeouts = [];
-        // IMPORTANT: if we're playing, reset the base timestamp so we don't overshoot
-        if (isPlaying) {
-          startTimestamp = performance.now();
-        }
+        if (isPlaying) startTimestamp = performance.now();
         draw();
       });
       gongList.appendChild(div);
     });
   }
 
+  // =====================
+  // Timer
+  // =====================
+  function updateTime() {
+    if (isPlaying && !dragging) {
+      const elapsed = (performance.now() - startTimestamp) / 1000;
+      currentTime = Math.min(pausedTime + elapsed, totalDuration);
+      const currentGongIndex = gongTimes.findIndex(t => currentTime >= t && currentTime < t + 0.5 && lastGongIndex < gongTimes.indexOf(t));
+      if (currentGongIndex !== -1 && currentGongIndex > lastGongIndex) {
+        const isLastGong = currentGongIndex === gongTimes.length - 1;
+        playMultipleGongs(isLastGong);
+        lastGongIndex = currentGongIndex;
+      }
+      if (currentTime >= totalDuration) {
+        pause();
+        currentTime = totalDuration;
+      }
+    }
+    draw();
+    if (isPlaying) rafId = requestAnimationFrame(updateTime);
+  }
+  function play() {
+    if (currentTime >= totalDuration) {
+      currentTime = 0; pausedTime = 0; lastGongIndex = -1;
+    }
+    isPlaying = true;
+    startTimestamp = performance.now();
+    pausedTime = currentTime;
+    rafId = requestAnimationFrame(updateTime);
+    draw();
+  }
+  function pause() {
+    isPlaying = false;
+    pausedTime = currentTime;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    draw();
+  }
+
+  // =====================
+  // Canvas sizing
+  // =====================
+  function resizeCanvas() {
+    const rect = dial.getBoundingClientRect();
+    dial.width  = rect.width  * DPR;
+    dial.height = rect.height * DPR;
+    draw();
+  }
+  new ResizeObserver(resizeCanvas).observe(dial);
+
+  // =====================
+  // Input Handlers
+  // =====================
+  startBtn.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+    currentTime = 0; pausedTime = 0; lastGongIndex = -1;
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (!isPlaying) play();
+  });
+  ffBtn.addEventListener('click', () => {
+    currentTime = Math.min(currentTime + 10, totalDuration);
+    pausedTime = currentTime;
+    if (isPlaying) startTimestamp = performance.now();
+    draw();
+  });
+  rewBtn.addEventListener('click', () => {
+    currentTime = Math.max(currentTime - 10, 0);
+    pausedTime = currentTime;
+    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    draw();
+  });
+  window.addEventListener('keydown', async (e) => {
+    if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
+  }, {capture:true});
+
+  // Canvas interactions — fixed indicator, rotate dial while dragging
+  dial.addEventListener('pointerdown', async (e) => {
+    await primeAudioIfNeeded();
+    const centerDistance = distanceFromCenter(e);
+    const rect = dial.getBoundingClientRect();
+    const cssRadius = Math.min(rect.width, rect.height) * 0.38;
+    const centerRadius = cssRadius * 0.6;
+
+    if (centerDistance < centerRadius) {
+      if (isPlaying) pause(); else play();
+    } else {
+      dragging = true;
+      const r = dial.getBoundingClientRect();
+      pointerX = (e.clientX - r.left) * DPR;
+      pointerY = (e.clientY - r.top)  * DPR;
+      dial.setPointerCapture(e.pointerId);
+      dragStartAngle = angleFromPointer(e);
+      dragStartTime = currentTime;
+    }
+  });
+  dial.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const r = dial.getBoundingClientRect();
+    pointerX = (e.clientX - r.left) * DPR;
+    pointerY = (e.clientY - r.top)  * DPR;
+    const aNow = angleFromPointer(e);
+    const delta = normAngle(aNow - dragStartAngle); // [+ccw, -cw]
+    const signedDelta = SCRUB_CLOCKWISE_INCREASES ? -delta : delta;
+    let newTime = dragStartTime + (signedDelta / TAU) * totalDuration;
+    newTime = Math.max(0, Math.min(totalDuration, newTime));
+    currentTime = newTime;
+    pausedTime = currentTime;
+    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    draw();
+  });
+  function stopDragging(e){ 
+    if (dragging) { dragging = false; pausedTime = currentTime; if (isPlaying) startTimestamp = performance.now(); }
+    try { dial.releasePointerCapture(e.pointerId); } catch(_){} 
+  }
+  dial.addEventListener('pointerup', stopDragging);
+  dial.addEventListener('pointercancel', stopDragging);
+  dial.addEventListener('pointerleave', stopDragging);
+
+  // =====================
   // Drawing
+  // =====================
   function draw() {
     const w = dial.width, h = dial.height;
     ctx.clearRect(0,0,w,h);
-
     const cx = w/2, cy = h/2;
     const radius = Math.min(w,h) * 0.38;
     const ring = Math.max(12, Math.min(w,h) * 0.05);
@@ -551,67 +485,108 @@
     ctx.stroke();
 
     const cur = Math.min(currentTime, totalDuration);
+    const frac = cur / Math.max(totalDuration, 0.001);
 
-    // Progress arc
+    // Progress arc: from top anticlockwise
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, START_ANGLE, angleForTime(cur, totalDuration));
+    ctx.arc(cx, cy, radius, START_ANGLE, START_ANGLE - frac*TAU, true);
     ctx.lineWidth = ring;
     ctx.lineCap = 'butt';
     ctx.strokeStyle = isPlaying ? 'rgba(110,231,255,0.9)' : 'rgba(148,163,184,0.6)';
     ctx.stroke();
 
-    // Minor ticks (each minute)
+    // Rotate dial graphics so current time aligns with indicator
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-frac * TAU);
+
+    // Minute ticks
     const minutes = Math.ceil(totalDuration/60);
     for (let m=0; m<=minutes; m++) {
-      const a = angleForTime(Math.min(m*60, totalDuration), totalDuration);
+      const a = START_ANGLE + Math.min(m*60, totalDuration)/Math.max(totalDuration,0.001)*TAU;
       const inner = radius - ring*0.6;
       const outer = radius + ring*0.1;
       ctx.beginPath();
-      ctx.moveTo(cx + inner*Math.cos(a), cy + inner*Math.sin(a));
-      ctx.lineTo(cx + outer*Math.cos(a), cy + outer*Math.sin(a));
+      ctx.moveTo(inner*Math.cos(a), inner*Math.sin(a));
+      ctx.lineTo(outer*Math.cos(a), outer*Math.sin(a));
       ctx.lineWidth = (m % 5 === 0) ? 3*DPR : 1.5*DPR;
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.stroke();
     }
 
     // Gong markers
-    gongTimes.forEach((t, i) => {
-      const a = angleForTime(Math.min(t, totalDuration), totalDuration);
+    gongTimes.forEach((t) => {
+      const a = START_ANGLE + Math.min(t, totalDuration)/Math.max(totalDuration,0.001)*TAU;
       const r0 = radius - ring*0.9;
       const r1 = radius + ring*0.35;
       ctx.beginPath();
-      ctx.moveTo(cx + r0*Math.cos(a), cy + r0*Math.sin(a));
-      ctx.lineTo(cx + r1*Math.cos(a), cy + r1*Math.sin(a));
+      ctx.moveTo(r0*Math.cos(a), r0*Math.sin(a));
+      ctx.lineTo(r1*Math.cos(a), r1*Math.sin(a));
       ctx.lineWidth = 1*DPR;
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
       ctx.stroke();
-
-      // Tiny label dot
       const dotR = 5 * DPR;
       ctx.beginPath();
-      ctx.arc(cx + (r1+8*DPR)*Math.cos(a), cy + (r1+8*DPR)*Math.sin(a), dotR, 0, TAU);
+      ctx.arc((r1+8*DPR)*Math.cos(a), (r1+8*DPR)*Math.sin(a), dotR, 0, TAU);
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.fill();
     });
 
-    // Progress line indicator
-    const aNow = angleForTime(cur, totalDuration);
+    // Rotating labels (inside dial)
+    const fontSize = Math.max(10, Math.floor(w*0.02));
+    ctx.fillStyle = 'rgba(233,238,247,0.75)';
+    ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const innerLabelR = radius - ring * 1.3; // near the inner edge of the ring
+
+    // start (time 0)
+    {
+      const a = START_ANGLE + 0.005 * TAU;
+      const x = innerLabelR * Math.cos(a);
+      const y = innerLabelR * Math.sin(a);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('start', 0, 0); ctx.restore();
+    }
+    // end (mirrors start toward center)
+    {
+      const a = START_ANGLE - 0.005 * TAU;
+      const x = innerLabelR * Math.cos(a);
+      const y = innerLabelR * Math.sin(a);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI/2); ctx.fillText('end', 0, 0); ctx.restore();
+    }
+    // half (50%)
+    {
+      const a = START_ANGLE + 0.5 * TAU;
+      const x = innerLabelR * Math.cos(a);
+      const y = innerLabelR * Math.sin(a);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('half', 0, 0); ctx.restore();
+    }
+
+    ctx.restore(); // end rotated dial graphics
+
+    // Fixed indicator line at the top
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
-    
-    // Update next gong display (HTML element)
+    ctx.beginPath();
+    ctx.moveTo(cx + lineStart*Math.cos(START_ANGLE), cy + lineStart*Math.sin(START_ANGLE));
+    ctx.lineTo(cx + lineEnd*Math.cos(START_ANGLE), cy + lineEnd*Math.sin(START_ANGLE));
+    ctx.lineWidth = 1*DPR;
+    ctx.strokeStyle = 'rgba(110,231,255,1)';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Next gong display
     const nextGongTime = gongTimes.find(t => t > currentTime);
     if (nextGongTime) {
       const remaining = nextGongTime - currentTime;
-
-      // Format as "Xm Ys" or "Ys" when X=0
       const remainingSecs = Math.max(0, Math.floor(remaining));
       const m = Math.floor(remainingSecs / 60);
       const s = remainingSecs % 60;
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
       const text = `Next gong will play in ${timeText}`;
-
-      nextGongDisplay.textContent = text;
+      const pausedNote = !isPlaying ? '<div class="paused-note">(paused)</div>' : '';
+      nextGongDisplay.innerHTML = text + pausedNote;
       if (isPlaying) {
         nextGongDisplay.style.color = remaining < 30 ? 'var(--ink)' : 'var(--accent)';
       } else {
@@ -620,35 +595,6 @@
       nextGongDisplay.style.display = 'block';
     } else {
       nextGongDisplay.style.display = 'none';
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(cx + lineStart*Math.cos(aNow), cy + lineStart*Math.sin(aNow));
-    ctx.lineTo(cx + lineEnd*Math.cos(aNow), cy + lineEnd*Math.sin(aNow));
-    ctx.lineWidth = 1*DPR;
-    ctx.strokeStyle = 'rgba(110,231,255,1)';
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Draw line from cursor to dial when dragging
-    if (dragging) {
-      const canvasX = pointerX;
-      const canvasY = pointerY;
-
-      // Calculate dial edge point on the line from center to pointer
-      const dx = canvasX - cx;
-      const dy = canvasY - cy;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      const edgeX = cx + (dx / distance) * radius;
-      const edgeY = cy + (dy / distance) * radius;
-
-      ctx.beginPath();
-      ctx.moveTo(canvasX, canvasY);
-      ctx.lineTo(edgeX, edgeY);
-      ctx.lineWidth = 2 * DPR;
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineCap = 'round';
-      ctx.stroke();
     }
 
     // Center play/pause area
@@ -672,14 +618,12 @@
 
     // Play/pause icon
     const iconSize = w * 0.028;
-    const iconY = cy + w*0.075 + 25;
+    const iconY = cy + w*0.075 + 25; // moved to +25
     ctx.fillStyle = 'rgba(110,231,255,0.85)';
     if (isPlaying) {
-      // Pause icon
       ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
       ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
     } else {
-      // Play icon
       ctx.beginPath();
       ctx.moveTo(cx - iconSize*0.6, iconY - iconSize*0.8);
       ctx.lineTo(cx - iconSize*0.6, iconY + iconSize*0.8);
@@ -689,10 +633,29 @@
     }
   }
 
-  // Initialize
+  // =====================
+  // Init
+  // =====================
   buildGongList();
   resizeCanvas();
   draw();
+
+  // =====================
+  // Self-tests (console)
+  // =====================
+  (function runTests(){
+    const eq = (a,b,msg) => { if (a!==b) throw new Error(`Assert failed: ${msg} expected ${b}, got ${a}`); };
+    const approx = (a,b,eps,msg) => { if (Math.abs(a-b) > (eps||1e-6)) throw new Error(`Approx failed: ${msg} expected ~${b}, got ${a}`); };
+    try {
+      eq(toSeconds('01:30'), 90, 'toSeconds 01:30');
+      eq(toSeconds('00:00'), 0, 'toSeconds 00:00');
+      eq(totalDuration, toSeconds('37:38'), 'totalDuration matches');
+      const t = 123.456; const ang = angleForTime(t, totalDuration); const back = timeForAngle(ang, totalDuration); approx(back, t, 1e-9, 'angle<->time invertible');
+      console.log('%cGong Timer tests passed','color:#0fa');
+    } catch (e) {
+      console.error('Gong Timer test failed:', e);
+    }
+  })();
 })();
 </script>
 </body>
