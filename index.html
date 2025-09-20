@@ -4,13 +4,15 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>Gong Timer — Interactive Player</title>
+<link rel="preload" as="audio" href="./individual_gong.mp3">
+<link rel="preload" as="audio" href="./final_gongs.mp3">
 <style>
   :root {
     --bg: #0f1115;
     --ink: #e9eef7;
-    --muted: #94a3b8;
+    --muted: #768293;
     --accent: #6ee7ff;
-    --accent2:#a78bfa;
+    --accent2:#449fef;
   }
   html, body {
     height: 100%;
@@ -88,9 +90,22 @@
     flex: 1;
     min-height: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     position: relative;
+  }
+  .next-gong-top {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent2);
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
+    z-index: 1;
+    font-variant-numeric: tabular-nums;
   }
   canvas { 
     width: 100%;
@@ -141,6 +156,7 @@
   </div>
 
   <div class="panel canvas-panel">
+    <div id="nextGongDisplay" class="next-gong-top"></div>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -157,8 +173,12 @@
   const totalDuration = gongTimes[gongTimes.length - 1]; // 37:38
   const GONG_DELAY = 3880; // 3.88 seconds in milliseconds
 
-  // Gong audio element
-  let gongAudio = null;
+  // Audio pool (replaces single gongAudio + cloneNode)
+  const GONG_POOL_SIZE = 5; // we sometimes need overlapping rings
+  const gongPool = [];
+  let gongIndex = 0;
+  let audioPrimed = false;
+  let finalGongAudio = null;
 
   // Elements
   const startBtn = document.getElementById('start');
@@ -167,6 +187,7 @@
   const dial = document.getElementById('dial');
   const ctx = dial.getContext('2d');
   const gongList = document.getElementById('gongList');
+  const nextGongDisplay = document.getElementById('nextGongDisplay');
 
   // Timer state
   let isPlaying = false;
@@ -177,18 +198,16 @@
   let dragging = false;
   let lastGongIndex = -1;
   let gongTimeouts = []; // Track active gong timeouts
-  // Normalized pointer coords in [0,1] within the centered square
-  let pointerUX = 0;
-  let pointerUY = 0;
+  let pointerX = 0; // canvas-space (device pixels)
+  let pointerY = 0;
 
   // Drawing metrics
   const DPR = Math.max(1, window.devicePixelRatio || 1);
 
   function resizeCanvas() {
     const rect = dial.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height);
-    dial.width  = size * DPR;
-    dial.height = size * DPR;
+    dial.width  = rect.width  * DPR;
+    dial.height = rect.height * DPR;
     draw();
   }
   new ResizeObserver(resizeCanvas).observe(dial);
@@ -220,62 +239,106 @@
 
   function angleFromPointer(ev) {
     const rect = dial.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height);
-    const left = rect.left + (rect.width - size) / 2;
-    const top  = rect.top  + (rect.height - size) / 2;
-    const x = ev.clientX - left;
-    const y = ev.clientY - top;
-    const cx = size / 2;
-    const cy = size / 2;
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    const cx = rect.width  / 2;
+    const cy = rect.height / 2;
     return Math.atan2(y - cy, x - cx);
   }
 
   function distanceFromCenter(ev) {
     const rect = dial.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height);
-    const left = rect.left + (rect.width - size) / 2;
-    const top  = rect.top  + (rect.height - size) / 2;
-    const x = ev.clientX - left;
-    const y = ev.clientY - top;
-    const cx = size / 2;
-    const cy = size / 2;
+    const x = ev.clientX - rect.left;
+    const y = ev.clientY - rect.top;
+    const cx = rect.width  / 2;
+    const cy = rect.height / 2;
     return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
   }
 
-  // Gong audio
-  async function initAudioContext() {
-    if (!gongAudio) {
-      gongAudio = new Audio('individual_gong.mp3');
-      gongAudio.preload = 'auto';
+  function createGongPool() {
+    if (gongPool.length) return; // already created
+    for (let i = 0; i < GONG_POOL_SIZE; i++) {
+      const a = new Audio('./individual_gong.mp3');
+      a.preload = 'auto';
+      gongPool.push(a);
+    }
+
+    // Create final gong audio
+    finalGongAudio = new Audio('./final_gongs.mp3');
+    finalGongAudio.preload = 'auto';
+  }
+
+  // Call this from a user gesture to unlock audio on mobile.
+  async function primeAudioIfNeeded() {
+    if (audioPrimed) return;
+    createGongPool();
+    try {
+      // Prime each element with a muted play→pause inside the gesture.
+      for (const a of gongPool) {
+        a.muted = true;
+        await a.play();
+        a.pause();
+        a.currentTime = 0;
+        a.muted = false;
+      }
+
+      // Prime final gong audio
+      if (finalGongAudio) {
+        finalGongAudio.muted = true;
+        await finalGongAudio.play();
+        finalGongAudio.pause();
+        finalGongAudio.currentTime = 0;
+        finalGongAudio.muted = false;
+      }
+
+      audioPrimed = true;
+    } catch (err) {
+      console.warn('Audio prime failed:', err);
     }
   }
 
+  // Use a round-robin source so overlapping gongs can play.
   function playGongSound() {
-    if (!gongAudio) return;
-    
-    // Create a new audio instance for each play to allow overlapping
-    const audio = gongAudio.cloneNode();
-    audio.currentTime = 0;
-    audio.play().catch(() => {}); // Ignore any play errors
+    if (!audioPrimed || !gongPool.length) return;
+    const a = gongPool[gongIndex];
+    gongIndex = (gongIndex + 1) % gongPool.length;
+    try {
+      a.currentTime = 0;
+      // Avoid awaiting; just fire and log if it fails.
+      a.play().catch(e => console.warn('play() blocked:', e));
+    } catch (e) {
+      console.warn('play error:', e);
+    }
   }
 
   // Play multiple gongs with delays
   function playMultipleGongs(isLastGong = false) {
-    const numGongs = isLastGong ? 5 : 3;
-    
     // Clear any existing gong timeouts
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
-    
-    // Play first gong immediately
-    playGongSound();
-    
-    // Schedule remaining gongs with 3.88s delay
-    for (let i = 1; i < numGongs; i++) {
-      const timeout = setTimeout(() => {
-        playGongSound();
-      }, GONG_DELAY * i);
-      gongTimeouts.push(timeout);
+
+    if (isLastGong && finalGongAudio) {
+      // Play final gongs audio file
+      try {
+        finalGongAudio.currentTime = 0;
+        finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e));
+      } catch (e) {
+        console.warn('final gong play error:', e);
+      }
+    } else {
+      // Play 3 individual gongs for non-final gongs
+      const numGongs = 3;
+
+      // Play first gong immediately
+      playGongSound();
+
+      // Schedule remaining gongs with 3.88s delay
+      for (let i = 1; i < numGongs; i++) {
+        const timeout = setTimeout(() => {
+          playGongSound();
+        }, GONG_DELAY * i);
+        gongTimeouts.push(timeout);
+      }
     }
   }
 
@@ -335,7 +398,7 @@
 
   // Event handlers
   startBtn.addEventListener('click', async () => {
-    await initAudioContext();
+    await primeAudioIfNeeded();
     currentTime = 0;
     pausedTime = 0;
     lastGongIndex = -1;
@@ -369,16 +432,16 @@
   });
 
   window.addEventListener('keydown', async (e) => {
-    if (e.code === 'Space') { 
-      e.preventDefault(); 
-      await initAudioContext();
+    if (e.code === 'Space') {
+      e.preventDefault();
+      await primeAudioIfNeeded();
       if (isPlaying) pause(); else play();
     }
   }, {capture:true});
 
   // Canvas interactions
   dial.addEventListener('pointerdown', async (e) => {
-    await initAudioContext();
+    await primeAudioIfNeeded();
     const centerDistance = distanceFromCenter(e);
     const rect = dial.getBoundingClientRect();
     const cssRadius = Math.min(rect.width, rect.height) * 0.38;
@@ -391,11 +454,8 @@
       // Click on outer ring - start dragging
       dragging = true;
       const r = dial.getBoundingClientRect();
-      const size = Math.min(r.width, r.height);
-      const left = r.left + (r.width - size) / 2;
-      const top  = r.top  + (r.height - size) / 2;
-      pointerUX = (e.clientX - left) / size;
-      pointerUY = (e.clientY - top)  / size;
+      pointerX = (e.clientX - r.left) * DPR;
+      pointerY = (e.clientY - r.top)  * DPR;
       dial.setPointerCapture(e.pointerId);
       scrub(e);
     }
@@ -404,11 +464,8 @@
   dial.addEventListener('pointermove', (e) => {
     if (dragging) {
       const r = dial.getBoundingClientRect();
-      const size = Math.min(r.width, r.height);
-      const left = r.left + (r.width - size) / 2;
-      const top  = r.top  + (r.height - size) / 2;
-      pointerUX = (e.clientX - left) / size;
-      pointerUY = (e.clientY - top)  / size;
+      pointerX = (e.clientX - r.left) * DPR;
+      pointerY = (e.clientY - r.top)  * DPR;
       scrub(e);
     }
   });
@@ -458,14 +515,19 @@
       div.className = 'chip';
       div.textContent = `${i+1} • ${fmt(sec)}`;
       div.title = 'Jump to ' + fmt(sec);
-      div.addEventListener('click', async () => { 
-        await initAudioContext();
-        currentTime = Math.min(sec, totalDuration);
+      div.addEventListener('click', async () => {
+        await primeAudioIfNeeded();
+        // Seek slightly before the target so we definitely pass through the gong
+        currentTime = Math.min(Math.max(sec - 0.75, 0), totalDuration);
         pausedTime = currentTime;
-        lastGongIndex = i - 1;
+        lastGongIndex = i - 1; // "previous gong" so this one will fire naturally
         // Clear any pending gongs
         gongTimeouts.forEach(timeout => clearTimeout(timeout));
         gongTimeouts = [];
+        // IMPORTANT: if we're playing, reset the base timestamp so we don't overshoot
+        if (isPlaying) {
+          startTimestamp = performance.now();
+        }
         draw();
       });
       gongList.appendChild(div);
@@ -520,7 +582,7 @@
       ctx.beginPath();
       ctx.moveTo(cx + r0*Math.cos(a), cy + r0*Math.sin(a));
       ctx.lineTo(cx + r1*Math.cos(a), cy + r1*Math.sin(a));
-      ctx.lineWidth = 4*DPR;
+      ctx.lineWidth = 1*DPR;
       ctx.strokeStyle = 'rgba(255,255,255,0.95)';
       ctx.stroke();
 
@@ -537,65 +599,41 @@
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
     
-    // Next gong text (outside the ring for mobile visibility)
+    // Update next gong display (HTML element)
     const nextGongTime = gongTimes.find(t => t > currentTime);
-    if (nextGongTime && w > 300) { // Only show on larger screens
+    if (nextGongTime) {
       const remaining = nextGongTime - currentTime;
-      const line1 = "Next gong:";
-      const line2 = fmt(remaining);
-      const fontSize = Math.floor(w*0.032);
 
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+      // Format as "Xm Ys" or "Ys" when X=0
+      const remainingSecs = Math.max(0, Math.floor(remaining));
+      const m = Math.floor(remainingSecs / 60);
+      const s = remainingSecs % 60;
+      const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
+      const text = `Next gong will play in ${timeText}`;
 
-      // Calculate text dimensions first
-      const line1Metrics = ctx.measureText(line1);
-      const line2Metrics = ctx.measureText(line2);
-      const maxWidth = Math.max(line1Metrics.width, line2Metrics.width);
-      const lineHeight = fontSize * 1.2;
-      const totalHeight = lineHeight * 2;
-      const padding = 6;
-
-      // Position outside the ring, but constrain to canvas bounds
-      const textRadius = radius + ring * 1.8;
-      let textX = cx + textRadius * Math.cos(aNow);
-      let textY = cy + textRadius * Math.sin(aNow);
-
-      // Constrain X position to keep text on screen
-      const halfWidth = maxWidth/2 + padding;
-      if (textX - halfWidth < 0) textX = halfWidth;
-      if (textX + halfWidth > w) textX = w - halfWidth;
-
-      // Constrain Y position to keep text on screen
-      const halfHeight = totalHeight/2 + padding;
-      if (textY - halfHeight < 0) textY = halfHeight;
-      if (textY + halfHeight > h) textY = h - halfHeight;
-
-      // Background for text readability
-      ctx.fillStyle = 'rgba(15,17,21,0.85)';
-      ctx.fillRect(textX - maxWidth/2 - padding, textY - totalHeight/2 - 3, maxWidth + 12, totalHeight + 6);
-
-      // Render both lines
-      const textColor = remaining < 30 ? 'rgba(110,231,255,0.95)' : 'rgba(167,139,250,0.95)';
-      ctx.fillStyle = textColor;
-      ctx.fillText(line1, textX, textY - lineHeight/2);
-      ctx.font = `bold ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-      ctx.fillText(line2, textX, textY + lineHeight/2);
+      nextGongDisplay.textContent = text;
+      if (isPlaying) {
+        nextGongDisplay.style.color = remaining < 30 ? 'var(--ink)' : 'var(--accent)';
+      } else {
+        nextGongDisplay.style.color = 'var(--muted)';
+      }
+      nextGongDisplay.style.display = 'block';
+    } else {
+      nextGongDisplay.style.display = 'none';
     }
     
     ctx.beginPath();
     ctx.moveTo(cx + lineStart*Math.cos(aNow), cy + lineStart*Math.sin(aNow));
     ctx.lineTo(cx + lineEnd*Math.cos(aNow), cy + lineEnd*Math.sin(aNow));
-    ctx.lineWidth = 4*DPR;
+    ctx.lineWidth = 1*DPR;
     ctx.strokeStyle = 'rgba(110,231,255,1)';
     ctx.lineCap = 'round';
     ctx.stroke();
 
     // Draw line from cursor to dial when dragging
     if (dragging) {
-      const canvasX = pointerUX * w;
-      const canvasY = pointerUY * h;
+      const canvasX = pointerX;
+      const canvasY = pointerY;
 
       // Calculate dial edge point on the line from center to pointer
       const dx = canvasX - cx;
