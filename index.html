@@ -313,8 +313,8 @@
   // Easing factor for displayTime (0..1). Higher = snappier.
   const EASE = 0.18;
 
-  // Set scrub direction preference: true => clockwise increases time
-  const SCRUB_CLOCKWISE_INCREASES = true;
+  // Set scrub direction preference: false => clockwise increases time (reversed from original)
+  const SCRUB_CLOCKWISE_INCREASES = false;
 
   // Drawing metrics
   const DPR = Math.max(1, window.devicePixelRatio || 1);
@@ -690,7 +690,7 @@
     const frac = cur / Math.max(totalDuration, 0.001);
 
 
-    // Progress arc (gradient + glow)
+    // Progress arc (gradient + glow) - now goes clockwise
     const progGrad = ctx.createLinearGradient(0, 0, w, 0);
     progGrad.addColorStop(0, 'rgba(110,231,255,0.95)');
     progGrad.addColorStop(1, 'rgba(68,159,239,0.95)');
@@ -698,19 +698,18 @@
     ctx.shadowColor = 'rgba(110,231,255,0.25)';
     ctx.shadowBlur = 18 * DPR;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, START_ANGLE, START_ANGLE - frac*TAU, true);
+    ctx.arc(cx, cy, radius, START_ANGLE, START_ANGLE + frac*TAU, false);
     ctx.lineWidth = ring;
     ctx.lineCap = 'butt';
     ctx.strokeStyle = isPlaying ? progGrad : 'rgba(148,163,184,0.55)';
     ctx.stroke();
     ctx.restore();
 
-    // Rotate dial graphics so current time aligns with indicator
+    // Keep dial graphics static (no rotation)
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(-frac * TAU);
 
-    // Minute ticks
+    // Minute ticks (static positions)
     const minutes = Math.ceil(totalDuration/60);
     for (let m=0; m<=minutes; m++) {
       const a = START_ANGLE + Math.min(m*60, totalDuration)/Math.max(totalDuration,0.001)*TAU;
@@ -724,7 +723,7 @@
       ctx.stroke();
     }
 
-    // Gong markers
+    // Gong markers (static positions)
     gongTimes.forEach((t, index) => {
       const a = START_ANGLE + Math.min(t, totalDuration)/Math.max(totalDuration,0.001)*TAU;
       const r0 = radius - ring*3;
@@ -752,9 +751,8 @@
       }
     });
 
-    // Completed segments light fill (inner area) - rotates with dial
+    // Completed segments light fill (inner area) - static positions
     const completedSegmentFill = 'rgba(110,231,255,0.1)';
-    //const completedSegmentFill = isPlaying ? 'rgba(110,231,255,0.1)' : 'rgba(110,231,255,0.04)';
     const innerRadius = radius; // Inner area where segment numbers are
 
     for (let i = 0; i < 8; i++) {
@@ -778,7 +776,7 @@
         const endAngle = START_ANGLE + (segmentEndTime / Math.max(totalDuration, 0.001)) * TAU;
 
         ctx.beginPath();
-        ctx.moveTo(0, 0); // Center in rotated context
+        ctx.moveTo(0, 0); // Center in translated context
         ctx.arc(0, 0, innerRadius, startAngle, endAngle);
         ctx.closePath();
         ctx.fillStyle = completedSegmentFill;
@@ -786,7 +784,7 @@
       }
     }
 
-    // Current segment light fill with ink color
+    // Current segment light fill with ink color (static positions)
     const currentSegmentFill = isPlaying ? 'rgba(233,238,247,0.08)' : 'rgba(233,238,247,0.03)'; // ink color with low opacity
     for (let i = 0; i < 8; i++) {
       let segmentStartTime, segmentEndTime;
@@ -807,7 +805,7 @@
         const endAngle = START_ANGLE + (segmentEndTime / Math.max(totalDuration, 0.001)) * TAU;
 
         ctx.beginPath();
-        ctx.moveTo(0, 0); // Center in rotated context
+        ctx.moveTo(0, 0); // Center in translated context
         ctx.arc(0, 0, innerRadius, startAngle, endAngle);
         ctx.closePath();
         ctx.fillStyle = currentSegmentFill;
@@ -816,7 +814,7 @@
       }
     }
 
-    // Rotating labels (inside dial)
+    // Static labels (inside dial)
     const labelScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-label-scale').trim());
     const fontSize = Math.max(10, Math.floor(w * labelScale));
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim();
@@ -846,7 +844,7 @@
     //   ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('half', 0, 0); ctx.restore();
     // }
 
-    // Segment numbers (1-8)
+    // Segment numbers (1-8) - static positions
     ctx.save();
     ctx.font = `bold ${20 * DPR}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
@@ -980,15 +978,16 @@
       ctx.restore();
     }
 
-    // Fixed indicator line at the top (glowing)
+    // Moving time indicator (shows current time position around circle)
+    const currentTimeAngle = START_ANGLE + (displayTime / Math.max(totalDuration, 0.001)) * TAU;
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
     ctx.save();
     ctx.shadowColor = 'rgba(110,231,255,0.45)';
     ctx.shadowBlur = 10 * DPR;
     ctx.beginPath();
-    ctx.moveTo(cx + lineStart*Math.cos(START_ANGLE), cy + lineStart*Math.sin(START_ANGLE));
-    ctx.lineTo(cx + lineEnd*Math.cos(START_ANGLE), cy + lineEnd*Math.sin(START_ANGLE));
+    ctx.moveTo(cx + lineStart*Math.cos(currentTimeAngle), cy + lineStart*Math.sin(currentTimeAngle));
+    ctx.lineTo(cx + lineEnd*Math.cos(currentTimeAngle), cy + lineEnd*Math.sin(currentTimeAngle));
     ctx.lineWidth = 2*DPR;
     ctx.strokeStyle = 'rgba(110,231,255,1)';
     ctx.lineCap = 'butt';
