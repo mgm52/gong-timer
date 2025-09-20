@@ -120,7 +120,7 @@
     transition: transform .08s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
   }
   button:hover { border-color: rgba(110,231,255,.5); box-shadow: var(--glow); }
-  button:active { transform: translateY(1px) scale(.99); }
+  button:active { /* Removed transform animation - using circle effect instead */ }
 
   /* Touch-friendly button sizing */
   @media (pointer: coarse) {
@@ -233,9 +233,48 @@
   .chip:hover { transform: translateY(-1px); border-color: rgba(110,231,255,.6); box-shadow: var(--glow); }
   .chip:active { transform: translateY(0); }
 
-  .corner-btn-center {
+  .corner-btn-quarter {
+    left: 65%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-half {
     left: 50%;
     transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-three-quarter {
+    left: 35%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  /* Button click animation */
+  .button-click-animation {
+    position: fixed;
+    pointer-events: none;
+    border-radius: 50%;
+    background: rgba(110, 231, 255, 0.6);
+    border: 3px solid rgba(110, 231, 255, 0.8);
+    transform: translate(-50%, -50%);
+    animation: buttonClickExpand 400ms ease-out forwards;
+    z-index: 1000;
+  }
+
+  @keyframes buttonClickExpand {
+    0% {
+      width: 0;
+      height: 0;
+      opacity: 1;
+    }
+    100% {
+      width: 100px;
+      height: 100px;
+      opacity: 0;
+    }
   }
 
   @media (max-height: 640px) {
@@ -252,7 +291,9 @@
     <div id="nextGongDisplay" class="next-gong-top"></div>
     <button id="rew" class="corner-btn corner-btn-left">- 30s</button>
     <button id="ff" class="corner-btn corner-btn-right">+ 30s</button>
-    <button id="halfGong" class="corner-btn corner-btn-center">➜ half</button>
+    <button id="quarterGong" class="corner-btn corner-btn-quarter">•••</button>
+    <button id="halfGong" class="corner-btn corner-btn-half">••</button>
+    <button id="threeQuarterGong" class="corner-btn corner-btn-three-quarter">•</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -283,7 +324,9 @@
   // =====================
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
+  const quarterGongBtn = document.getElementById('quarterGong');
   const halfGongBtn = document.getElementById('halfGong');
+  const threeQuarterGongBtn = document.getElementById('threeQuarterGong');
   const dial = document.getElementById('dial');
   const ctx = dial.getContext('2d');
   const gongList = document.getElementById('gongList');
@@ -300,11 +343,13 @@
   let rafId = null;
   let updateInterval = null;
   let dragging = false;
+  let pointerDown = false;
   let lastGongIndex = -1;
   let gongTimeouts = [];
   let pointerX = 0;
   let pointerY = 0;
   let lastAngle = 0;
+  let currentPointerAngle = 0;
 
   // Drag rotation state (for fixed indicator UX)
   let dragStartAngle = 0; // angle at pointerdown
@@ -326,6 +371,9 @@
   // Play/pause animation
   const playPauseAnimations = []; // {t: timestamp(ms), isPlay: boolean}
 
+  // Button click animations (now using DOM elements)
+  const activeButtonAnimations = new Set(); // Track active animation elements
+
   // Animation control vars - easy to tweak!
   const ANIM_SPEED = 600;        // duration in ms
   const ANIM_SIZE = 0.4;          // max radius as fraction of canvas (0.5 = half canvas)
@@ -335,6 +383,8 @@
   const ANIM_BOUNCE = false;       // use bounce easing vs smooth
 
   const PLAY_PAUSE_LIFE = ANIM_SPEED;
+  // Button click animation duration matches CSS animation
+  const BUTTON_CLICK_LIFE = 400;
 
   // =====================
   // Utilities
@@ -573,12 +623,38 @@
     updateButtonStates();
     draw();
   });
+  quarterGongBtn.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+    const quarterGongTime = gongTimes[1]; // 2nd gong (09:23)
+    currentTime = Math.min(Math.max(quarterGongTime + 12, 0), totalDuration);
+    pausedTime = currentTime;
+    lastGongIndex = 1; // so we're past the quarter gong
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
+    updateButtonStates();
+    draw();
+  });
   halfGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     const middleGongTime = gongTimes[3]; // 4th gong (18:48)
     currentTime = Math.min(Math.max(middleGongTime + 12, 0), totalDuration);
     pausedTime = currentTime;
     lastGongIndex = 3; // so we're past the middle gong
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
+    updateButtonStates();
+    draw();
+  });
+  threeQuarterGongBtn.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+    const threeQuarterGongTime = gongTimes[5]; // 6th gong (28:12)
+    currentTime = Math.min(Math.max(threeQuarterGongTime + 12, 0), totalDuration);
+    pausedTime = currentTime;
+    lastGongIndex = 5; // so we're past the three-quarter gong
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
@@ -602,6 +678,7 @@
     const cssRadius = Math.min(rect.width, rect.height) * 0.38;
     const centerRadius = cssRadius * 0.6;
 
+    pointerDown = true;
     if (centerDistance < centerRadius) {
       if (isPlaying) pause(); else play();
     } else {
@@ -609,8 +686,9 @@
       const r = dial.getBoundingClientRect();
       pointerX = (e.clientX - r.left) * DPR;
       pointerY = (e.clientY - r.top)  * DPR;
-      dial.setPointerCapture(e.pointerId);
+      // Removed pointer capture to prevent button interference
       lastAngle = angleFromPointer(e);
+      currentPointerAngle = angleFromPointer(e);
       dragStartAngle = angleFromPointer(e);
       dragStartTime = currentTime;
       syncDisplayToCurrent();
@@ -622,6 +700,7 @@
     pointerX = (e.clientX - r.left) * DPR;
     pointerY = (e.clientY - r.top)  * DPR;
     const aNow = angleFromPointer(e);
+    currentPointerAngle = aNow;
     const smallDelta = normAngle(aNow - lastAngle);
     lastAngle = aNow;
     const signedSmallDelta = SCRUB_CLOCKWISE_INCREASES ? -smallDelta : smallDelta;
@@ -638,13 +717,61 @@
     updateButtonStates();
     draw();
   });
-  function stopDragging(e){ 
-    if (dragging) { dragging = false; pausedTime = currentTime; if (isPlaying) startTimestamp = performance.now(); }
-    try { dial.releasePointerCapture(e.pointerId); } catch(_){} 
+  function stopDragging(e){
+    pointerDown = false;
+    if (dragging) {
+      dragging = false;
+      pausedTime = currentTime;
+      if (isPlaying) startTimestamp = performance.now();
+      draw(); // Force redraw to hide cursor ring
+    }
   }
   dial.addEventListener('pointerup', stopDragging);
   dial.addEventListener('pointercancel', stopDragging);
   dial.addEventListener('pointerleave', stopDragging);
+
+  // Global pointer up handler to ensure dragging state is reset
+  document.addEventListener('pointerup', (e) => {
+    if (dragging || pointerDown) {
+      stopDragging(e);
+    }
+  });
+
+  // Function to create button click animation
+  function createButtonClickAnimation(element) {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+
+    // Create animation element
+    const animationEl = document.createElement('div');
+    animationEl.className = 'button-click-animation';
+    animationEl.style.left = x + 'px';
+    animationEl.style.top = y + 'px';
+
+    document.body.appendChild(animationEl);
+    activeButtonAnimations.add(animationEl);
+
+    // Remove element after animation completes
+    setTimeout(() => {
+      if (animationEl.parentNode) {
+        animationEl.parentNode.removeChild(animationEl);
+      }
+      activeButtonAnimations.delete(animationEl);
+    }, BUTTON_CLICK_LIFE);
+  }
+
+  // Ensure buttons always work by preventing canvas interference
+  [quarterGongBtn, halfGongBtn, threeQuarterGongBtn, ffBtn, rewBtn].forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.stopPropagation(); // Prevent canvas from capturing this event
+      stopDragging(e); // Reset any dragging state
+    });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent canvas from interfering
+      createButtonClickAnimation(btn); // Add click animation
+    });
+  });
 
   // =====================
   // Drawing
@@ -732,7 +859,6 @@
       // Make first and halfway (4th) gong markers thicker
       const isSpecialMarker = index === 7 || index === 3; // final (index 7) and halfway (index 3)
       const lineWidth = isSpecialMarker ? 4*DPR : 1*DPR;
-      const dotRadius = isSpecialMarker ? 4*DPR : 2*DPR;
 
       ctx.beginPath();
       ctx.moveTo(r0*Math.cos(a), r0*Math.sin(a));
@@ -741,11 +867,39 @@
       ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
       ctx.stroke();
 
-      // Add dot above halfway gong marker (index 3)
-      if (index === 3) {
-        const dotDistance = radius + ring; // Outside the dial ring
+      // Add dots above markers
+      const dotDistance = radius + ring; // Outside the dial ring
+      const dotRadius = 4*DPR;
+      const dotSpacing = 8*DPR;
+
+      if (index === 1) { // Quarter mark - 3 dots
         ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), 5*DPR, 0, TAU);
+        ctx.arc(dotDistance*Math.cos(a) - dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a) + dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+      } else if (index === 3) { // Half mark - 2 dots
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a) - dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a) + dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+      } else if (index === 5) { // Three-quarter mark - 1 dot
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
         ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
         ctx.fill();
       }
@@ -974,6 +1128,49 @@
         'rgba(110,231,255,1)' : 'rgba(30,30,35,1)';
       ctx.lineWidth = 6 * DPR;
       ctx.stroke();
+
+      ctx.restore();
+    }
+
+    // Button click animations now handled by CSS animations on DOM elements
+
+    // Cursor ring (rotates with current time indicator while dragging)
+    if (dragging) {
+      const currentTimeAngle = START_ANGLE + (displayTime / Math.max(totalDuration, 0.001)) * TAU;
+      const cursorRingRadius = radius + ring * 0.8;
+      const cursorRingThickness = 3 * DPR;
+
+      // Thin outer ring
+      ctx.save();
+      ctx.shadowColor = 'rgba(110,231,255,0.3)';
+      ctx.shadowBlur = 6 * DPR;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cursorRingRadius, 0, TAU);
+      ctx.strokeStyle = 'rgba(110,231,255,0.6)';
+      ctx.lineWidth = cursorRingThickness;
+      ctx.stroke();
+      ctx.restore();
+
+      // Tick marks on cursor ring (rotated with current time)
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(currentTimeAngle);
+
+      const numTicks = 8;
+      for (let i = 0; i < numTicks; i++) {
+        const tickAngle = (i / numTicks) * TAU;
+        const tickInner = cursorRingRadius - ring * 0.3;
+        const tickOuter = cursorRingRadius + ring * 0.3;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(tickInner * Math.cos(tickAngle), tickInner * Math.sin(tickAngle));
+        ctx.lineTo(tickOuter * Math.cos(tickAngle), tickOuter * Math.sin(tickAngle));
+        ctx.strokeStyle = 'rgba(110,231,255,0.4)';
+        ctx.lineWidth = 10 * DPR;
+        ctx.stroke();
+        ctx.restore();
+      }
 
       ctx.restore();
     }
