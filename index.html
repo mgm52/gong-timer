@@ -115,8 +115,13 @@
     position: absolute;
     bottom: 12px;
     z-index: 3;
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 8px;
+    font-size: 16px;
+    width: 90px;
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .corner-btn-left {
     left: 12px;
@@ -173,8 +178,8 @@
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
-    <button id="rew" class="corner-btn corner-btn-left">⟲ - 30s</button>
-    <button id="ff" class="corner-btn corner-btn-right">+ 30s ⟲</button>
+    <button id="rew" class="corner-btn corner-btn-left">- 30s</button>
+    <button id="ff" class="corner-btn corner-btn-right">+ 30s</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -218,6 +223,7 @@
   let startTimestamp = 0;
   let pausedTime = 0;
   let rafId = null;
+  let updateInterval = null;
   let dragging = false;
   let lastGongIndex = -1;
   let gongTimeouts = [];
@@ -248,6 +254,7 @@
     const [m, s] = mmss.split(':').map(Number);
     return (m||0) * 60 + (s||0);
   }
+  function syncDisplayToCurrent() { displayTime = currentTime; }
   function fmt(secs) {
     secs = Math.max(0, Math.floor(secs || 0));
     const m = Math.floor(secs / 60);
@@ -365,6 +372,7 @@
         gongTimeouts.forEach(timeout => clearTimeout(timeout));
         gongTimeouts = [];
         if (isPlaying) startTimestamp = performance.now();
+        else syncDisplayToCurrent();
         updateButtonStates();
         draw();
       });
@@ -409,12 +417,14 @@
     startTimestamp = performance.now();
     pausedTime = currentTime;
     rafId = requestAnimationFrame(updateTime);
+    updateInterval = setInterval(updateButtonStates, 1000);
     draw();
   }
   function pause() {
     isPlaying = false;
     pausedTime = currentTime;
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
     draw();
   }
 
@@ -436,6 +446,7 @@
     currentTime = Math.min(currentTime + 30, totalDuration);
     pausedTime = currentTime;
     if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
     updateButtonStates();
     draw();
   });
@@ -447,13 +458,14 @@
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
     updateButtonStates();
     draw();
   });
   window.addEventListener('keydown', async (e) => {
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
-    if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; updateButtonStates(); draw(); }
-    if (e.key === 'ArrowLeft') { currentTime = Math.max(currentTime - 5, 0); pausedTime = currentTime; updateButtonStates(); draw(); }
+    if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
+    if (e.key === 'ArrowLeft') { currentTime = Math.max(currentTime - 5, 0); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
   }, {capture:true});
 
   // Canvas interactions — fixed indicator, rotate dial while dragging
@@ -474,6 +486,7 @@
       dial.setPointerCapture(e.pointerId);
       dragStartAngle = angleFromPointer(e);
       dragStartTime = currentTime;
+      syncDisplayToCurrent();
     }
   });
   dial.addEventListener('pointermove', (e) => {
@@ -492,6 +505,7 @@
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
+    syncDisplayToCurrent();
     updateButtonStates();
     draw();
   });
@@ -663,7 +677,7 @@
     const nextGongTime = gongTimes.find(t => t > currentTime);
     if (nextGongTime) {
       const remaining = nextGongTime - currentTime;
-      const remainingSecs = Math.max(0, Math.floor(remaining));
+      const remainingSecs = Math.max(0, Math.ceil(remaining));
       const m = Math.floor(remainingSecs / 60);
       const s = remainingSecs % 60;
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
