@@ -16,9 +16,10 @@
     --font-sm: 14px;      /* buttons, chips */
     --font-md: 15px;      /* touch buttons */
     --font-lg: 20px;      /* corner buttons */
-    --font-xl: 20px;      /* paused note */
-    --font-2xl: 24px;     /* next gong display */
-    --font-3xl: 50px;     /* time text */
+    --font-xl: 25px;      /* paused note */
+    --font-2xl: 35px;     /* next gong display */
+    --font-3xl: 60px;     /* time text */
+    --font-4xl: 80px;     /* next gong display */
 
     /* Canvas font scale factors (multiplied by canvas width) */
     --canvas-label-scale: 0.03;     /* rotating labels inside dial */
@@ -158,12 +159,14 @@
     font-weight: 800;
     text-align: center;
     z-index: 2;
+    width: max-content;
     font-variant-numeric: tabular-nums;
     text-shadow: 0 1px 0 rgba(0,0,0,.4);
     transition: color .3s ease, transform .4s cubic-bezier(.2,.8,.2,1);
   }
   .next-gong-top.pulse { transform: translateX(-50%) scale(1.02); }
-  .paused-note { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .next-gong-text { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .paused-note { font-size: var(--font-3xl); font-weight: 800; color: var(--muted); margin-top: -10px; }
   .time-text { font-size: var(--font-3xl); font-weight: 800; }
 
   .corner-btn {
@@ -999,8 +1002,8 @@
       const m = Math.floor(remainingSecs / 60);
       const s = remainingSecs % 60;
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
-      const text = `<div class="paused-note">next gong in</div> <span class="time-text">${timeText}</span>`;
-      const pausedNote = !isPlaying ? `<div class="paused-note">${currentTime === 0 ? '(tap ▶ to start)' : '(paused)'}</div>` : '';
+      const text = `<div class="next-gong-text">next gong in</div> <span class="time-text">${timeText}</span>`;
+      const pausedNote = !isPlaying ? `<div class="paused-note">${currentTime === 0 ? 'tap ▶' : 'paused'}</div>` : '';
       nextGongDisplay.innerHTML = text + pausedNote;
       if (isPlaying) {
         // Gradually transition from accent to ink color as time gets closer
