@@ -11,6 +11,21 @@
      Theme & Base Styles
      ===================== */
   :root {
+    /* Font sizes */
+    --font-xs: 13px;      /* sub text, small buttons */
+    --font-sm: 14px;      /* buttons, chips */
+    --font-md: 15px;      /* touch buttons */
+    --font-lg: 20px;      /* corner buttons */
+    --font-xl: 20px;      /* paused note */
+    --font-2xl: 24px;     /* next gong display */
+    --font-3xl: 50px;     /* time text */
+
+    /* Canvas font scale factors (multiplied by canvas width) */
+    --canvas-label-scale: 0.03;     /* rotating labels inside dial */
+    --canvas-time-scale: 0.11;     /* center time display */
+    --canvas-subtitle-scale: 0.05; /* "of XX:XX" subtitle */
+
+    /* Colors */
     --bg: #0b0e14;        /* deeper background */
     --bg2: #0f1420;       /* panel contrast */
     --bg3: #07090d;       /* darker gradient end */
@@ -48,12 +63,16 @@
   html, body {
     height: 100%;
     background: radial-gradient(1200px 800px at 20% -10%, rgba(68,159,239,.15), transparent 60%),
-                radial-gradient(1400px 900px at 110% 120%, rgba(110,231,255,.12), transparent 60%),
+                radial-gradient(1400px 900px at 110% 120%, rgba(110,231,255,.92), transparent 50%),
                 linear-gradient(180deg, var(--bg), var(--bg3) 60%);
     color: var(--ink);
     margin: 0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
     overflow: hidden;
+  }
+  html.paused body {
+    background: radial-gradient(1400px 900px at 110% 120%, rgba(190, 190, 190, 0.92), transparent 50%),
+                linear-gradient(0deg, var(--bg), var(--bg3) 60%);
   }
   * { box-sizing: border-box; }
 
@@ -94,7 +113,7 @@
     border-radius: 12px;
     cursor: pointer;
     font-weight: 700;
-    font-size: 14px;
+    font-size: var(--font-sm);
     letter-spacing: .2px;
     transition: transform .08s ease, box-shadow .2s ease, border-color .2s ease, background .2s ease;
   }
@@ -105,7 +124,7 @@
   @media (pointer: coarse) {
     button {
       padding: 12px 16px;
-      font-size: 15px;
+      font-size: var(--font-md);
       min-height: 44px; /* iOS touch target minimum */
     }
     .corner-btn { min-width: 44px; }
@@ -135,7 +154,7 @@
     left: 50%;
     transform: translateX(-50%);
     color: var(--accent2);
-    font-size: 24px;
+    font-size: var(--font-2xl);
     font-weight: 800;
     text-align: center;
     z-index: 2;
@@ -144,15 +163,15 @@
     transition: color .3s ease, transform .4s cubic-bezier(.2,.8,.2,1);
   }
   .next-gong-top.pulse { transform: translateX(-50%) scale(1.02); }
-  .paused-note { font-size: 20px; font-weight: 600; color: var(--muted); margin-top: 2px; }
-  .time-text { font-size: 40px; font-weight: 800; }
+  .paused-note { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .time-text { font-size: var(--font-3xl); font-weight: 800; }
 
   .corner-btn {
     position: absolute;
     bottom: 35px;
     z-index: 3;
     padding: 8px;
-    font-size: 16px;
+    font-size: var(--font-lg);
     width: 90px;
     height: 90px;
     display: flex;
@@ -173,9 +192,6 @@
   .corner-btn-right {
     right: 12px;
   }
-  .corner-btn-mid {
-    right: 120px;
-  }
 
   canvas { 
     width: 100%;
@@ -192,7 +208,7 @@
   /* =====================
      Gong list chips
      ===================== */
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  .sub { color: var(--muted); font-size: var(--font-xs); margin-bottom: 8px; }
   .list {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
@@ -206,34 +222,22 @@
     font-variant-numeric: tabular-nums;
     text-align: center;
     cursor: pointer;
-    font-size: 14px;
+    font-size: var(--font-sm);
     transition: transform .12s ease, box-shadow .25s ease, border-color .2s ease;
     user-select: none;
   }
   .chip:hover { transform: translateY(-1px); border-color: rgba(110,231,255,.6); box-shadow: var(--glow); }
   .chip:active { transform: translateY(0); }
 
-  .theme-toggle {
-    position: fixed;
-    bottom: 35px;
+  .corner-btn-center {
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    padding: 0;
-    box-shadow: var(--glow);
   }
 
   @media (max-height: 640px) {
     .sub { display: none; }
     .panel { padding: 10px; }
-    button { padding: 8px 12px; font-size: 13px; }
+    button { padding: 8px 12px; font-size: var(--font-xs); }
   }
 </style>
 </head>
@@ -244,7 +248,7 @@
     <div id="nextGongDisplay" class="next-gong-top"></div>
     <button id="rew" class="corner-btn corner-btn-left">- 30s</button>
     <button id="ff" class="corner-btn corner-btn-right">+ 30s</button>
-    <button id="midGong" class="corner-btn corner-btn-mid">Mid</button>
+    <button id="halfGong" class="corner-btn corner-btn-center">➜ half</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -254,7 +258,6 @@
   </div>
 </div>
 
-<button id="themeToggle" class="theme-toggle">🌙</button>
 
 <script>
 (() => {
@@ -276,12 +279,11 @@
   // =====================
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
-  const midGongBtn = document.getElementById('midGong');
+  const halfGongBtn = document.getElementById('halfGong');
   const dial = document.getElementById('dial');
   const ctx = dial.getContext('2d');
   const gongList = document.getElementById('gongList');
   const nextGongDisplay = document.getElementById('nextGongDisplay');
-  const themeToggle = document.getElementById('themeToggle');
 
   // =====================
   // State
@@ -315,7 +317,20 @@
 
   // Pulse FX on each gong
   const pulses = []; // {t: timestamp(ms), life: 800}
-  const PULSE_LIFE = 820;
+  const PULSE_LIFE = 3000;
+
+  // Play/pause animation
+  const playPauseAnimations = []; // {t: timestamp(ms), isPlay: boolean}
+
+  // Animation control vars - easy to tweak!
+  const ANIM_SPEED = 600;        // duration in ms
+  const ANIM_SIZE = 0.4;          // max radius as fraction of canvas (0.5 = half canvas)
+  const ANIM_LAYERS = 1;          // number of concentric circles (1-5)
+  const ANIM_INTENSITY = 0.6;     // opacity/brightness (0.1-1.0)
+  const ANIM_GLOW = 20;           // glow blur amount in pixels
+  const ANIM_BOUNCE = false;       // use bounce easing vs smooth
+
+  const PLAY_PAUSE_LIFE = ANIM_SPEED;
 
   // =====================
   // Utilities
@@ -483,7 +498,10 @@
     if (Math.abs(delta) < 0.015) displayTime = currentTime; // snap when close
 
     draw();
-    if (isPlaying) rafId = requestAnimationFrame(updateTime);
+
+    // Keep animation loop running if playing or if there are active play/pause animations
+    const hasActiveAnimations = playPauseAnimations.length > 0;
+    if (isPlaying || hasActiveAnimations) rafId = requestAnimationFrame(updateTime);
   }
   function play() {
     if (currentTime >= totalDuration) {
@@ -494,6 +512,11 @@
     pausedTime = currentTime;
     rafId = requestAnimationFrame(updateTime);
     updateInterval = setInterval(updateButtonStates, 1000);
+    document.documentElement.classList.remove('paused');
+
+    // Add play animation
+    playPauseAnimations.push({ t: performance.now(), isPlay: true });
+
     draw();
   }
   function pause() {
@@ -501,6 +524,14 @@
     pausedTime = currentTime;
     if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
+    document.documentElement.classList.add('paused');
+
+    // Add pause animation
+    playPauseAnimations.push({ t: performance.now(), isPlay: false });
+
+    // Start animation loop for the pause animation
+    rafId = requestAnimationFrame(updateTime);
+
     draw();
   }
 
@@ -538,10 +569,10 @@
     updateButtonStates();
     draw();
   });
-  midGongBtn.addEventListener('click', async () => {
+  halfGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     const middleGongTime = gongTimes[3]; // 4th gong (18:48)
-    currentTime = Math.min(Math.max(middleGongTime + 1, 0), totalDuration);
+    currentTime = Math.min(Math.max(middleGongTime + 12, 0), totalDuration);
     pausedTime = currentTime;
     lastGongIndex = 3; // so we're past the middle gong
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -557,15 +588,6 @@
     if (e.key === 'ArrowLeft') { currentTime = Math.max(currentTime - 5, 0); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
   }, {capture:true});
 
-  // Theme toggle
-  themeToggle.addEventListener('click', () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-theme', newTheme);
-    themeToggle.textContent = newTheme === 'light' ? '☀️' : '🌙';
-    localStorage.setItem('theme', newTheme);
-    draw(); // Redraw canvas with new theme colors
-  });
 
   // Canvas interactions — fixed indicator, rotate dial while dragging
   dial.addEventListener('pointerdown', async (e) => {
@@ -663,6 +685,7 @@
     const cur = Math.min(displayTime, totalDuration);
     const frac = cur / Math.max(totalDuration, 0.001);
 
+
     // Progress arc (gradient + glow)
     const progGrad = ctx.createLinearGradient(0, 0, w, 0);
     progGrad.addColorStop(0, 'rgba(110,231,255,0.95)');
@@ -698,25 +721,100 @@
     }
 
     // Gong markers
-    gongTimes.forEach((t) => {
+    gongTimes.forEach((t, index) => {
       const a = START_ANGLE + Math.min(t, totalDuration)/Math.max(totalDuration,0.001)*TAU;
-      const r0 = radius - ring*0.9;
+      const r0 = radius - ring*3;
       const r1 = radius + ring*0.35;
+
+      // Make first and halfway (4th) gong markers thicker
+      const isSpecialMarker = index === 7 || index === 3; // final (index 7) and halfway (index 3)
+      const lineWidth = isSpecialMarker ? 4*DPR : 1*DPR;
+      const dotRadius = isSpecialMarker ? 4*DPR : 2*DPR;
+
       ctx.beginPath();
       ctx.moveTo(r0*Math.cos(a), r0*Math.sin(a));
       ctx.lineTo(r1*Math.cos(a), r1*Math.sin(a));
-      ctx.lineWidth = 1*DPR;
+      ctx.lineWidth = lineWidth;
       ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
       ctx.stroke();
-      const dotR = 2 * DPR;
-      ctx.beginPath();
-      ctx.arc((r1+8*DPR)*Math.cos(a), (r1+8*DPR)*Math.sin(a), dotR, 0, TAU);
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
-      ctx.fill();
+
+      // Add dot above halfway gong marker (index 3)
+      if (index === 3) {
+        const dotDistance = radius + ring; // Outside the dial ring
+        ctx.beginPath();
+        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), 5*DPR, 0, TAU);
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fill();
+      }
     });
 
+    // Completed segments light fill (inner area) - rotates with dial
+    const completedSegmentFill = 'rgba(110,231,255,0.1)';
+    //const completedSegmentFill = isPlaying ? 'rgba(110,231,255,0.1)' : 'rgba(110,231,255,0.04)';
+    const innerRadius = radius; // Inner area where segment numbers are
+
+    for (let i = 0; i < 8; i++) {
+      let segmentStartTime, segmentEndTime;
+      if (i === 0) {
+        segmentStartTime = 0;
+        segmentEndTime = gongTimes[0];
+      } else if (i === 7) {
+        segmentStartTime = gongTimes[6];
+        segmentEndTime = totalDuration;
+      } else {
+        segmentStartTime = gongTimes[i-1];
+        segmentEndTime = gongTimes[i];
+      }
+
+      // Only fill if we've passed the gong at the end of this segment
+      const shouldFill = (i < 7 && currentTime > gongTimes[i]) || (i === 7 && currentTime >= totalDuration);
+
+      if (shouldFill) {
+        const startAngle = START_ANGLE + (segmentStartTime / Math.max(totalDuration, 0.001)) * TAU;
+        const endAngle = START_ANGLE + (segmentEndTime / Math.max(totalDuration, 0.001)) * TAU;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0); // Center in rotated context
+        ctx.arc(0, 0, innerRadius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = completedSegmentFill;
+        ctx.fill();
+      }
+    }
+
+    // Current segment light fill with ink color
+    const currentSegmentFill = isPlaying ? 'rgba(233,238,247,0.08)' : 'rgba(233,238,247,0.03)'; // ink color with low opacity
+    for (let i = 0; i < 8; i++) {
+      let segmentStartTime, segmentEndTime;
+      if (i === 0) {
+        segmentStartTime = 0;
+        segmentEndTime = gongTimes[0];
+      } else if (i === 7) {
+        segmentStartTime = gongTimes[6];
+        segmentEndTime = totalDuration;
+      } else {
+        segmentStartTime = gongTimes[i-1];
+        segmentEndTime = gongTimes[i];
+      }
+
+      // Fill if this is the current segment (we're within its time range)
+      if (currentTime >= segmentStartTime && currentTime < segmentEndTime) {
+        const startAngle = START_ANGLE + (segmentStartTime / Math.max(totalDuration, 0.001)) * TAU;
+        const endAngle = START_ANGLE + (segmentEndTime / Math.max(totalDuration, 0.001)) * TAU;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0); // Center in rotated context
+        ctx.arc(0, 0, innerRadius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = currentSegmentFill;
+        ctx.fill();
+        break; // Only one current segment
+      }
+    }
+
     // Rotating labels (inside dial)
-    const fontSize = Math.max(10, Math.floor(w*0.03));
+    const labelScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-label-scale').trim());
+    const fontSize = Math.max(10, Math.floor(w * labelScale));
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim();
     ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
@@ -724,27 +822,93 @@
 
     const innerLabelR = radius - ring * 1.5; // near the inner edge of the ring
 
-    // start (time 0)
-    {
-      const a = START_ANGLE + 0.006 * TAU;
-      const x = innerLabelR * Math.cos(a);
-      const y = innerLabelR * Math.sin(a);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('start', 0, 0); ctx.restore();
+    // start/end/half labels hidden for now
+    // {
+    //   const a = START_ANGLE + 0.006 * TAU;
+    //   const x = innerLabelR * Math.cos(a);
+    //   const y = innerLabelR * Math.sin(a);
+    //   ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('start', 0, 0); ctx.restore();
+    // }
+    // {
+    //   const a = START_ANGLE - 0.006 * TAU;
+    //   const x = innerLabelR * Math.cos(a);
+    //   const y = innerLabelR * Math.sin(a);
+    //   ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI/2); ctx.fillText('end', 0, 0); ctx.restore();
+    // }
+    // {
+    //   const a = START_ANGLE + 0.5 * TAU;
+    //   const x = innerLabelR * Math.cos(a);
+    //   const y = innerLabelR * Math.sin(a);
+    //   ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('half', 0, 0); ctx.restore();
+    // }
+
+    // Segment numbers (1-8)
+    ctx.save();
+    ctx.font = `bold ${20 * DPR}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const segmentLabelR = radius - ring * 1.5; // Position further inward
+
+    // Determine current segment based on current time
+    let currentSegmentIndex = -1;
+    for (let i = 0; i < 8; i++) {
+      let segmentStartTime, segmentEndTime;
+      if (i === 0) {
+        segmentStartTime = 0;
+        segmentEndTime = gongTimes[0];
+      } else if (i === 7) {
+        segmentStartTime = gongTimes[6];
+        segmentEndTime = totalDuration;
+      } else {
+        segmentStartTime = gongTimes[i-1];
+        segmentEndTime = gongTimes[i];
+      }
+
+      if (currentTime >= segmentStartTime && currentTime < segmentEndTime) {
+        currentSegmentIndex = i;
+        break;
+      }
     }
-    // end (mirrors start toward center)
-    {
-      const a = START_ANGLE - 0.006 * TAU;
-      const x = innerLabelR * Math.cos(a);
-      const y = innerLabelR * Math.sin(a);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI/2); ctx.fillText('end', 0, 0); ctx.restore();
+
+    // Calculate segment positions - each segment is between two gong times
+    for (let i = 0; i < 8; i++) {
+      let segmentMidTime;
+      if (i === 0) {
+        // First segment: from start (0) to first gong
+        segmentMidTime = gongTimes[0] / 2;
+      } else if (i === 7) {
+        // Last segment: from last gong to end
+        segmentMidTime = gongTimes[6] + (totalDuration - gongTimes[6]) / 2;
+      } else {
+        // Middle segments: between consecutive gongs
+        segmentMidTime = (gongTimes[i-1] + gongTimes[i]) / 2;
+      }
+
+      const a = START_ANGLE + Math.min(segmentMidTime, totalDuration) / Math.max(totalDuration, 0.001) * TAU;
+      const x = segmentLabelR * Math.cos(a);
+      const y = segmentLabelR * Math.sin(a);
+
+      // Set color based on segment state
+      if (i === currentSegmentIndex) {
+        // Current segment: ink color at 1.0 opacity
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+      } else if (i < currentSegmentIndex) {
+        // Previous segments: accent color at 1.0 opacity
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      } else {
+        // Future segments: default color at 0.35 opacity
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim().replace(/[\d.]+\)$/, '0.35)');
+      }
+
+      // Rotate each number to be perpendicular to its position on the dial
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(a + Math.PI / 2); // Rotate by angle + 90 degrees to be perpendicular
+      ctx.fillText((i + 1).toString(), 0, 0);
+      ctx.restore();
     }
-    // half (50%)
-    {
-      const a = START_ANGLE + 0.5 * TAU;
-      const x = innerLabelR * Math.cos(a);
-      const y = innerLabelR * Math.sin(a);
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('half', 0, 0); ctx.restore();
-    }
+    ctx.restore();
 
     ctx.restore(); // end rotated dial graphics
 
@@ -753,12 +917,63 @@
       const age = performance.now() - pulses[i].t;
       if (age > PULSE_LIFE) { pulses.splice(i,1); continue; }
       const k = age / PULSE_LIFE; // 0..1
-      const r = radius + ring*0.75 + k * (ring*1.6);
+      const r = radius + ring*0.75 + k * (ring*2);
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.strokeStyle = `rgba(110,231,255,${0.25 * (1 - k)})`;
-      ctx.lineWidth = 2 * DPR * (1 - k);
+      ctx.lineWidth = 8 * DPR * (1 - k);
       ctx.stroke();
+    }
+
+    // Play/pause animation (expanding & fading circle from center)
+    for (let i = playPauseAnimations.length - 1; i >= 0; i--) {
+      const age = performance.now() - playPauseAnimations[i].t;
+      if (age > PLAY_PAUSE_LIFE) { playPauseAnimations.splice(i,1); continue; }
+      const k = age / PLAY_PAUSE_LIFE; // 0..1
+
+      // Different easing for play vs pause
+      let easeK;
+      if (playPauseAnimations[i].isPlay) {
+        // Play: normal easing
+        const animK = k;
+        easeK = ANIM_BOUNCE ?
+          (animK < 0.5 ? 4 * animK * animK * animK : 1 - Math.pow(-2 * animK + 2, 3) / 2) :
+          1 - Math.pow(1 - animK, 3);
+      } else {
+        // Pause: start fast, end slow (gentler ease-out)
+        const animK = 1 - k; // reverse time
+        easeK = 1 - Math.pow(1 - animK, 2); // gentler quadratic ease-out
+      }
+
+      // Expansion size
+      const maxRadius = Math.min(w, h) * ANIM_SIZE;
+      const r = easeK * maxRadius;
+
+      // Single layer animation
+      ctx.save();
+
+      const baseAlpha = playPauseAnimations[i].isPlay ? (1 - k) : k; // Pause starts from 0 opacity
+      ctx.globalAlpha = baseAlpha * ANIM_INTENSITY;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+
+      // Colors without glow effect
+      if (playPauseAnimations[i].isPlay) {
+        ctx.fillStyle = 'rgba(110,231,255,1)';
+      } else {
+        ctx.fillStyle = 'rgba(60,60,65,1)';
+      }
+      ctx.fill();
+
+      // Add stroke ring
+      ctx.globalAlpha = (baseAlpha * ANIM_INTENSITY) * 0.8;
+      ctx.strokeStyle = playPauseAnimations[i].isPlay ?
+        'rgba(110,231,255,1)' : 'rgba(30,30,35,1)';
+      ctx.lineWidth = 6 * DPR;
+      ctx.stroke();
+
+      ctx.restore();
     }
 
     // Fixed indicator line at the top (glowing)
@@ -813,8 +1028,8 @@
       innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
     } else {
       // Greyed out when paused
-      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.4)'));
-      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.5)'));
+      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.8)'));
+      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
     }
     ctx.fillStyle = innerGrad;
     ctx.fill();
@@ -826,10 +1041,15 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    ctx.font = `bold ${Math.floor(w*0.075)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-    ctx.fillText(fmt(cur), cx, cy - w*0.015);
+    const timeScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-scale').trim());
+    ctx.font = `bold ${Math.floor(w * timeScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.save();
+    ctx.globalAlpha = isPlaying ? 1 : 0.6;
+    ctx.fillText(fmt(cur), cx, cy - w*0.035);
+    ctx.restore();
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle').trim();
-    ctx.font = `${Math.floor(w*0.028)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    const subtitleScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle-scale').trim());
+    ctx.font = `${Math.floor(w * subtitleScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.04);
 
     // Play/pause icon (with bounce when toggled)
@@ -855,10 +1075,9 @@
   // =====================
   // Init
   // =====================
-  // Initialize theme from localStorage
-  const savedTheme = localStorage.getItem('theme') || 'light';
-  document.documentElement.setAttribute('data-theme', savedTheme);
-  themeToggle.textContent = savedTheme === 'light' ? '☀️' : '🌙';
+  // Set dark mode as default and paused state
+  document.documentElement.setAttribute('data-theme', 'dark');
+  document.documentElement.classList.add('paused');
 
   buildGongList();
   updateButtonStates();
