@@ -7,9 +7,7 @@
 <link rel="preload" as="audio" href="./individual_gong.mp3">
 <link rel="preload" as="audio" href="./final_gongs.mp3">
 <style>
-  /* =====================
-     Theme & Base Styles
-     ===================== */
+  /* Theme & Base Styles */
   :root {
     /* Font sizes */
     --font-xs: 13px;      /* sub text, small buttons */
@@ -19,7 +17,6 @@
     --font-xl: 25px;      /* paused note */
     --font-2xl: 35px;     /* next gong display */
     --font-3xl: 55px;     /* time text */
-    --font-4xl: 80px;     /* next gong display */
 
     /* Canvas font scale factors (multiplied by canvas width) */
     --canvas-label-scale: 0.03;     /* rotating labels inside dial */
@@ -77,9 +74,7 @@
   }
   * { box-sizing: border-box; }
 
-  /* =====================
-     Layout & Panels (glass + subtle animation)
-     ===================== */
+  /* Layout & Panels */
   .wrap {
     height: 100dvh;
     max-width: 980px;
@@ -103,9 +98,7 @@
   @keyframes panelIn { from { transform: translateY(8px); opacity: 0 } }
 
 
-  /* =====================
-     Buttons (micro‑interaction)
-     ===================== */
+  /* Buttons */
   button {
     appearance: none;
     background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
@@ -137,9 +130,7 @@
   .btn-disabled:hover { border-color: rgba(255,255,255,0.14); box-shadow: none; }
 
 
-  /* =====================
-     Canvas Stage
-     ===================== */
+  /* Canvas Stage */
   .canvas-panel {
     flex: 1;
     min-height: 0;
@@ -209,29 +200,6 @@
     filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
   }
 
-  /* =====================
-     Gong list chips
-     ===================== */
-  .sub { color: var(--muted); font-size: var(--font-xs); margin-bottom: 8px; }
-  .list {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-    gap: 8px;
-  }
-  .chip {
-    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
-    border: 1px solid rgba(255,255,255,0.14);
-    border-radius: 999px;
-    padding: 7px 10px;
-    font-variant-numeric: tabular-nums;
-    text-align: center;
-    cursor: pointer;
-    font-size: var(--font-sm);
-    transition: transform .12s ease, box-shadow .25s ease, border-color .2s ease;
-    user-select: none;
-  }
-  .chip:hover { transform: translateY(-1px); border-color: rgba(110,231,255,.6); box-shadow: var(--glow); }
-  .chip:active { transform: translateY(0); }
 
   .corner-btn-quarter {
     left: 65%;
@@ -278,7 +246,6 @@
   }
 
   @media (max-height: 640px) {
-    .sub { display: none; }
     .panel { padding: 10px; }
     button { padding: 8px 12px; font-size: var(--font-xs); }
   }
@@ -297,31 +264,23 @@
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
-  <div class="panel" style="display: none;">
-    <div class="sub">Gongs (tap to jump)</div>
-    <div id="gongList" class="list"></div>
-  </div>
 </div>
 
 
 <script>
 (() => {
-  // =====================
   // Config & Audio Assets
-  // =====================
   const gongTimes = ["04:43","09:23","14:06","18:48","23:30","28:12","32:54","37:38"].map(toSeconds);
   const totalDuration = gongTimes[gongTimes.length - 1]; // 37:38
   const GONG_DELAY = 3880; // 3.88 seconds in milliseconds
 
-  const GONG_POOL_SIZE = 5; // overlapping rings
+  const GONG_POOL_SIZE = 3; // for overlapping gongs
   const gongPool = [];
   let gongIndex = 0;
   let audioPrimed = false;
   let finalGongAudio = null;
 
-  // =====================
   // DOM
-  // =====================
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
   const quarterGongBtn = document.getElementById('quarterGong');
@@ -329,12 +288,9 @@
   const threeQuarterGongBtn = document.getElementById('threeQuarterGong');
   const dial = document.getElementById('dial');
   const ctx = dial.getContext('2d');
-  const gongList = document.getElementById('gongList');
   const nextGongDisplay = document.getElementById('nextGongDisplay');
 
-  // =====================
   // State
-  // =====================
   let isPlaying = false;
   let currentTime = 0;      // logic time (audio/triggers)
   let displayTime = 0;      // eased UI time
@@ -371,24 +327,12 @@
   // Play/pause animation
   const playPauseAnimations = []; // {t: timestamp(ms), isPlay: boolean}
 
-  // Button click animations (now using DOM elements)
-  const activeButtonAnimations = new Set(); // Track active animation elements
 
-  // Animation control vars - easy to tweak!
-  const ANIM_SPEED = 600;        // duration in ms
-  const ANIM_SIZE = 0.4;          // max radius as fraction of canvas (0.5 = half canvas)
-  const ANIM_LAYERS = 1;          // number of concentric circles (1-5)
-  const ANIM_INTENSITY = 0.6;     // opacity/brightness (0.1-1.0)
-  const ANIM_GLOW = 20;           // glow blur amount in pixels
-  const ANIM_BOUNCE = false;       // use bounce easing vs smooth
-
-  const PLAY_PAUSE_LIFE = ANIM_SPEED;
-  // Button click animation duration matches CSS animation
+  // Animation durations
+  const PLAY_PAUSE_LIFE = 600;
   const BUTTON_CLICK_LIFE = 400;
 
-  // =====================
   // Utilities
-  // =====================
   function toSeconds(mmss) {
     const [m, s] = mmss.split(':').map(Number);
     return (m||0) * 60 + (s||0);
@@ -439,18 +383,13 @@
     return Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
   }
 
-  // =====================
   // Audio setup
-  // =====================
   function createGongPool() {
-    if (gongPool.length) return; // already created
+    if (gongPool.length) return;
     for (let i = 0; i < GONG_POOL_SIZE; i++) {
-      const a = new Audio('./individual_gong.mp3');
-      a.preload = 'auto';
-      gongPool.push(a);
+      gongPool.push(new Audio('./individual_gong.mp3'));
     }
     finalGongAudio = new Audio('./final_gongs.mp3');
-    finalGongAudio.preload = 'auto';
   }
   async function primeAudioIfNeeded() {
     if (audioPrimed) return;
@@ -499,35 +438,8 @@
     }
   }
 
-  // =====================
-  // Build gong list (defined BEFORE use)
-  // =====================
-  function buildGongList() {
-    gongList.innerHTML = '';
-    gongTimes.forEach((sec, i) => {
-      const div = document.createElement('div');
-      div.className = 'chip';
-      div.textContent = `${i+1} • ${fmt(sec)}`;
-      div.title = 'Jump to ' + fmt(sec);
-      div.addEventListener('click', async () => {
-        await primeAudioIfNeeded();
-        currentTime = Math.min(Math.max(sec - 0.75, 0), totalDuration);
-        pausedTime = currentTime;
-        lastGongIndex = i - 1; // so this one will fire naturally
-        gongTimeouts.forEach(timeout => clearTimeout(timeout));
-        gongTimeouts = [];
-        if (isPlaying) startTimestamp = performance.now();
-        else syncDisplayToCurrent();
-        updateButtonStates();
-        draw();
-      });
-      gongList.appendChild(div);
-    });
-  }
 
-  // =====================
   // Timer
-  // =====================
   function updateTime() {
     if (isPlaying && !dragging) {
       const elapsed = (performance.now() - startTimestamp) / 1000;
@@ -589,9 +501,7 @@
     draw();
   }
 
-  // =====================
   // Canvas sizing
-  // =====================
   function resizeCanvas() {
     const rect = dial.getBoundingClientRect();
     dial.width  = rect.width  * DPR;
@@ -600,9 +510,7 @@
   }
   new ResizeObserver(resizeCanvas).observe(dial);
 
-  // =====================
   // Input Handlers
-  // =====================
   ffBtn.addEventListener('click', () => {
     currentTime = Math.min(currentTime + 30, totalDuration);
     pausedTime = currentTime;
@@ -626,7 +534,7 @@
   quarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     const quarterGongTime = gongTimes[1]; // 2nd gong (09:23)
-    currentTime = Math.min(Math.max(quarterGongTime + 12, 0), totalDuration);
+    currentTime = Math.min(Math.max(quarterGongTime + 5, 0), totalDuration);
     pausedTime = currentTime;
     lastGongIndex = 1; // so we're past the quarter gong
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -639,7 +547,7 @@
   halfGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     const middleGongTime = gongTimes[3]; // 4th gong (18:48)
-    currentTime = Math.min(Math.max(middleGongTime + 12, 0), totalDuration);
+    currentTime = Math.min(Math.max(middleGongTime + 5, 0), totalDuration);
     pausedTime = currentTime;
     lastGongIndex = 3; // so we're past the middle gong
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -652,7 +560,7 @@
   threeQuarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     const threeQuarterGongTime = gongTimes[5]; // 6th gong (28:12)
-    currentTime = Math.min(Math.max(threeQuarterGongTime + 12, 0), totalDuration);
+    currentTime = Math.min(Math.max(threeQuarterGongTime + 5, 0), totalDuration);
     pausedTime = currentTime;
     lastGongIndex = 5; // so we're past the three-quarter gong
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
@@ -750,14 +658,12 @@
     animationEl.style.top = y + 'px';
 
     document.body.appendChild(animationEl);
-    activeButtonAnimations.add(animationEl);
 
     // Remove element after animation completes
     setTimeout(() => {
       if (animationEl.parentNode) {
         animationEl.parentNode.removeChild(animationEl);
       }
-      activeButtonAnimations.delete(animationEl);
     }, BUTTON_CLICK_LIFE);
   }
 
@@ -773,9 +679,7 @@
     });
   });
 
-  // =====================
   // Drawing
-  // =====================
   function updateButtonStates() {
     if (currentTime === 0) {
       rewBtn.classList.add('btn-disabled');
@@ -793,14 +697,6 @@
     const radius = Math.min(w,h) * 0.38;
     const ring = Math.max(12, Math.min(w,h) * 0.05);
 
-    // Soft ambient halo
-    const halo = ctx.createRadialGradient(cx, cy, radius*0.6, cx, cy, radius*1.4);
-    halo.addColorStop(0, 'rgba(110,231,255,.04)');
-    halo.addColorStop(1, 'rgba(110,231,255,0)');
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius*1.4, 0, TAU);
-    ctx.fill();
 
     // Base ring (with gradient)
     const baseGrad = ctx.createLinearGradient(0, 0, 0, h);
@@ -906,7 +802,7 @@
     });
 
     // Completed segments light fill (inner area) - static positions
-    const completedSegmentFill = 'rgba(110,231,255,0.1)';
+    const completedSegmentFill = 'rgba(110,231,255,0.25)';
     const innerRadius = radius; // Inner area where segment numbers are
 
     for (let i = 0; i < 8; i++) {
@@ -1087,29 +983,17 @@
       if (age > PLAY_PAUSE_LIFE) { playPauseAnimations.splice(i,1); continue; }
       const k = age / PLAY_PAUSE_LIFE; // 0..1
 
-      // Different easing for play vs pause
-      let easeK;
-      if (playPauseAnimations[i].isPlay) {
-        // Play: normal easing
-        const animK = k;
-        easeK = ANIM_BOUNCE ?
-          (animK < 0.5 ? 4 * animK * animK * animK : 1 - Math.pow(-2 * animK + 2, 3) / 2) :
-          1 - Math.pow(1 - animK, 3);
-      } else {
-        // Pause: start fast, end slow (gentler ease-out)
-        const animK = 1 - k; // reverse time
-        easeK = 1 - Math.pow(1 - animK, 2); // gentler quadratic ease-out
-      }
+      // Simple easing for play vs pause
+      const easeK = playPauseAnimations[i].isPlay ?
+        1 - Math.pow(1 - k, 3) : // play: smooth ease-out
+        1 - Math.pow(1 - (1 - k), 2); // pause: gentle ease-out
 
-      // Expansion size
-      const maxRadius = Math.min(w, h) * ANIM_SIZE;
+      const maxRadius = Math.min(w, h) * 0.4;
       const r = easeK * maxRadius;
 
-      // Single layer animation
       ctx.save();
-
-      const baseAlpha = playPauseAnimations[i].isPlay ? (1 - k) : k; // Pause starts from 0 opacity
-      ctx.globalAlpha = baseAlpha * ANIM_INTENSITY;
+      const baseAlpha = playPauseAnimations[i].isPlay ? (1 - k) : k;
+      ctx.globalAlpha = baseAlpha * 0.6;
 
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
@@ -1123,7 +1007,7 @@
       ctx.fill();
 
       // Add stroke ring
-      ctx.globalAlpha = (baseAlpha * ANIM_INTENSITY) * 0.8;
+      ctx.globalAlpha = (baseAlpha * 0.6) * 0.8;
       ctx.strokeStyle = playPauseAnimations[i].isPlay ?
         'rgba(110,231,255,1)' : 'rgba(30,30,35,1)';
       ctx.lineWidth = 6 * DPR;
@@ -1225,13 +1109,13 @@
     const bg2Rgb = bg2Color.startsWith('#') ? hexToRgb(bg2Color) : bg2Color;
 
     if (isPlaying) {
-      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.8)'));
-      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
-    } else {
+    innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.6)'));
+    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.95)'));    
+  } else {
       // Greyed out when paused
-      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.8)'));
-      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
-    }
+    innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.95)'));
+    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.6)'));    
+  }
     ctx.fillStyle = innerGrad;
     ctx.fill();
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-border').trim();
@@ -1273,34 +1157,15 @@
     ctx.restore();
   }
 
-  // =====================
   // Init
-  // =====================
   // Set dark mode as default and paused state
   document.documentElement.setAttribute('data-theme', 'dark');
   document.documentElement.classList.add('paused');
 
-  buildGongList();
   updateButtonStates();
   resizeCanvas();
   draw();
 
-  // =====================
-  // Self-tests (console)
-  // =====================
-  (function runTests(){
-    const eq = (a,b,msg) => { if (a!==b) throw new Error(`Assert failed: ${msg} expected ${b}, got ${a}`); };
-    const approx = (a,b,eps,msg) => { if (Math.abs(a-b) > (eps||1e-6)) throw new Error(`Approx failed: ${msg} expected ~${b}, got ${a}`); };
-    try {
-      eq(toSeconds('01:30'), 90, 'toSeconds 01:30');
-      eq(toSeconds('00:00'), 0, 'toSeconds 00:00');
-      eq(totalDuration, toSeconds('37:38'), 'totalDuration matches');
-      const t = 123.456; const ang = angleForTime(t, totalDuration); const back = timeForAngle(ang, totalDuration); approx(back, t, 1e-9, 'angle<->time invertible');
-      console.log('%cGong Timer tests passed','color:#0fa');
-    } catch (e) {
-      console.error('Gong Timer test failed:', e);
-    }
-  })();
 })();
 </script>
 </body>
