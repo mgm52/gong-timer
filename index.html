@@ -181,11 +181,37 @@
     border: none;
     box-shadow: none;
   }
-  .corner-btn-left {
-    left: 12px;
+  .corner-btn-pos1 {
+    left: 8.33%;
+    transform: translateX(-50%);
   }
-  .corner-btn-right {
-    right: 12px;
+  .corner-btn-pos2 {
+    left: 25%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-pos3 {
+    left: 41.67%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-pos4 {
+    left: 58.33%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-pos5 {
+    left: 75%;
+    transform: translateX(-50%);
+    font-size: 28px;
+    line-height: 1;
+  }
+  .corner-btn-pos6 {
+    left: 91.67%;
+    transform: translateX(-50%);
   }
 
   canvas {
@@ -198,26 +224,6 @@
     cursor: pointer;
     object-fit: contain;
     filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
-  }
-
-
-  .corner-btn-quarter {
-    left: 65%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-half {
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-three-quarter {
-    left: 35%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
   }
 
   /* Button click animation */
@@ -256,11 +262,12 @@
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
-    <button id="rew" class="corner-btn corner-btn-left">- 30s</button>
-    <button id="ff" class="corner-btn corner-btn-right">+ 30s</button>
-    <button id="quarterGong" class="corner-btn corner-btn-quarter">•••</button>
-    <button id="halfGong" class="corner-btn corner-btn-half">••</button>
-    <button id="threeQuarterGong" class="corner-btn corner-btn-three-quarter">•</button>
+    <button id="rew" class="corner-btn corner-btn-pos1">- 30s</button>
+    <button id="threeQuarterGong" class="corner-btn corner-btn-pos2">•</button>
+    <button id="halfGong" class="corner-btn corner-btn-pos3">••</button>
+    <button id="quarterGong" class="corner-btn corner-btn-pos4">•••</button>
+    <button id="fastForward" class="corner-btn corner-btn-pos5">>></button>
+    <button id="ff" class="corner-btn corner-btn-pos6">+ 30s</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -284,6 +291,7 @@
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
   const quarterGongBtn = document.getElementById('quarterGong');
+  const fastForwardBtn = document.getElementById('fastForward');
   const halfGongBtn = document.getElementById('halfGong');
   const threeQuarterGongBtn = document.getElementById('threeQuarterGong');
   const dial = document.getElementById('dial');
@@ -570,6 +578,29 @@
     updateButtonStates();
     draw();
   });
+  fastForwardBtn.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+
+    // Find current segment
+    let currentSegmentEndTime = totalDuration;
+    for (let i = 0; i < gongTimes.length; i++) {
+      if (currentTime < gongTimes[i]) {
+        currentSegmentEndTime = gongTimes[i];
+        break;
+      }
+    }
+
+    // Jump to 1 second before the end of current segment
+    currentTime = Math.max(currentSegmentEndTime - 1, currentTime);
+    pausedTime = currentTime;
+    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
+    updateButtonStates();
+    draw();
+  });
   window.addEventListener('keydown', async (e) => {
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
     if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
@@ -668,7 +699,7 @@
   }
 
   // Ensure buttons always work by preventing canvas interference
-  [quarterGongBtn, halfGongBtn, threeQuarterGongBtn, ffBtn, rewBtn].forEach(btn => {
+  [quarterGongBtn, fastForwardBtn, halfGongBtn, threeQuarterGongBtn, ffBtn, rewBtn].forEach(btn => {
     btn.addEventListener('pointerdown', (e) => {
       e.stopPropagation(); // Prevent canvas from capturing this event
       stopDragging(e); // Reset any dragging state
