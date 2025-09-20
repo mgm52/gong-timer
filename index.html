@@ -100,6 +100,16 @@
   }
   button:hover { border-color: rgba(110,231,255,.5); box-shadow: var(--glow); }
   button:active { transform: translateY(1px) scale(.99); }
+
+  /* Touch-friendly button sizing */
+  @media (pointer: coarse) {
+    button {
+      padding: 12px 16px;
+      font-size: 15px;
+      min-height: 44px; /* iOS touch target minimum */
+    }
+    .corner-btn { min-width: 44px; }
+  }
   .btn-accent { color: var(--bg3); background: linear-gradient(180deg, rgba(110,231,255,.95), rgba(68,159,239,.9)); border-color: rgba(110,231,255,.85); box-shadow: 0 6px 24px rgba(110,231,255,.3); }
   .btn-accent:hover { filter: saturate(115%); }
   .btn-disabled { opacity: 0.4; cursor: not-allowed; }
@@ -139,7 +149,7 @@
 
   .corner-btn {
     position: absolute;
-    bottom: 12px;
+    bottom: 35px;
     z-index: 3;
     padding: 8px;
     font-size: 16px;
@@ -162,6 +172,9 @@
   }
   .corner-btn-right {
     right: 12px;
+  }
+  .corner-btn-mid {
+    right: 120px;
   }
 
   canvas { 
@@ -231,6 +244,7 @@
     <div id="nextGongDisplay" class="next-gong-top"></div>
     <button id="rew" class="corner-btn corner-btn-left">- 30s</button>
     <button id="ff" class="corner-btn corner-btn-right">+ 30s</button>
+    <button id="midGong" class="corner-btn corner-btn-mid">Mid</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
@@ -262,6 +276,7 @@
   // =====================
   const ffBtn = document.getElementById('ff');
   const rewBtn = document.getElementById('rew');
+  const midGongBtn = document.getElementById('midGong');
   const dial = document.getElementById('dial');
   const ctx = dial.getContext('2d');
   const gongList = document.getElementById('gongList');
@@ -283,6 +298,7 @@
   let gongTimeouts = [];
   let pointerX = 0;
   let pointerY = 0;
+  let lastAngle = 0;
 
   // Drag rotation state (for fixed indicator UX)
   let dragStartAngle = 0; // angle at pointerdown
@@ -522,6 +538,19 @@
     updateButtonStates();
     draw();
   });
+  midGongBtn.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+    const middleGongTime = gongTimes[3]; // 4th gong (18:48)
+    currentTime = Math.min(Math.max(middleGongTime + 1, 0), totalDuration);
+    pausedTime = currentTime;
+    lastGongIndex = 3; // so we're past the middle gong
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
+    if (isPlaying) startTimestamp = performance.now();
+    else syncDisplayToCurrent();
+    updateButtonStates();
+    draw();
+  });
   window.addEventListener('keydown', async (e) => {
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
     if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
@@ -540,6 +569,7 @@
 
   // Canvas interactions — fixed indicator, rotate dial while dragging
   dial.addEventListener('pointerdown', async (e) => {
+    e.preventDefault(); // Prevent default touch behaviors
     await primeAudioIfNeeded();
     const centerDistance = distanceFromCenter(e);
     const rect = dial.getBoundingClientRect();
@@ -554,6 +584,7 @@
       pointerX = (e.clientX - r.left) * DPR;
       pointerY = (e.clientY - r.top)  * DPR;
       dial.setPointerCapture(e.pointerId);
+      lastAngle = angleFromPointer(e);
       dragStartAngle = angleFromPointer(e);
       dragStartTime = currentTime;
       syncDisplayToCurrent();
@@ -565,9 +596,11 @@
     pointerX = (e.clientX - r.left) * DPR;
     pointerY = (e.clientY - r.top)  * DPR;
     const aNow = angleFromPointer(e);
-    const delta = normAngle(aNow - dragStartAngle); // [+ccw, -cw]
-    const signedDelta = SCRUB_CLOCKWISE_INCREASES ? -delta : delta;
-    let newTime = dragStartTime + (signedDelta / TAU) * totalDuration;
+    const smallDelta = normAngle(aNow - lastAngle);
+    lastAngle = aNow;
+    const signedSmallDelta = SCRUB_CLOCKWISE_INCREASES ? -smallDelta : smallDelta;
+    const timeDelta = (signedSmallDelta / TAU) * totalDuration;
+    let newTime = currentTime + timeDelta;
     newTime = Math.max(0, Math.min(totalDuration, newTime));
     currentTime = newTime;
     pausedTime = currentTime;
@@ -683,24 +716,24 @@
     });
 
     // Rotating labels (inside dial)
-    const fontSize = Math.max(10, Math.floor(w*0.02));
+    const fontSize = Math.max(10, Math.floor(w*0.03));
     ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim();
     ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const innerLabelR = radius - ring * 1.3; // near the inner edge of the ring
+    const innerLabelR = radius - ring * 1.5; // near the inner edge of the ring
 
     // start (time 0)
     {
-      const a = START_ANGLE + 0.005 * TAU;
+      const a = START_ANGLE + 0.006 * TAU;
       const x = innerLabelR * Math.cos(a);
       const y = innerLabelR * Math.sin(a);
       ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI/2); ctx.fillText('start', 0, 0); ctx.restore();
     }
     // end (mirrors start toward center)
     {
-      const a = START_ANGLE - 0.005 * TAU;
+      const a = START_ANGLE - 0.006 * TAU;
       const x = innerLabelR * Math.cos(a);
       const y = innerLabelR * Math.sin(a);
       ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI/2); ctx.fillText('end', 0, 0); ctx.restore();
@@ -774,8 +807,15 @@
     const innerGrad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 0.6);
     const bg2Color = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
     const bg2Rgb = bg2Color.startsWith('#') ? hexToRgb(bg2Color) : bg2Color;
-    innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.8)'));
-    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
+
+    if (isPlaying) {
+      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.8)'));
+      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.92)'));
+    } else {
+      // Greyed out when paused
+      innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.4)'));
+      innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.5)'));
+    }
     ctx.fillStyle = innerGrad;
     ctx.fill();
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-border').trim();
