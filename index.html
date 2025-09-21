@@ -93,6 +93,7 @@
     margin: 0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
     overflow: hidden;
+    filter: saturate(130%) hue-rotate(90deg);
   }
   html.paused body {
     background: radial-gradient(1400px 900px at 110% 120%, var(--gray-pause), transparent 50%),
@@ -1258,7 +1259,7 @@
       const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
       const text = `<div class="next-gong-text">next gong in</div> <span class="time-text">${timeText}</span>`;
       const pausedNote = !isPlaying ?
-        (currentTime === 0 ? `<div class="tap-note">tap ▶ to start</div>` : `<div class="paused-note">paused</div>`) : '';
+        (currentTime === 0 ? `<div class="tap-note">tap ▸ to start</div>` : `<div class="paused-note">paused</div>`) : '';
       nextGongDisplay.innerHTML = text + pausedNote;
       if (isPlaying) {
         // Gradually transition from accent to ink color as time gets closer
