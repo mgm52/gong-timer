@@ -1263,27 +1263,12 @@
     ctx.lineWidth = 2*DPR;
     ctx.stroke();
 
-    // Center text
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    const timeScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-scale').trim());
-    ctx.font = `bold ${Math.floor(w * timeScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    // Play/pause icon (4x larger, transparent, behind time text)
+    const iconSize = w * 0.152; // 4x larger (0.038 * 4)
+    const iconY = cy; // Centered in dial
     ctx.save();
-    ctx.globalAlpha = isPlaying ? 1 : 0.6;
-    ctx.fillText(fmt(cur), cx, cy - w*0.035);
-    ctx.restore();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle').trim();
-    const subtitleScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle-scale').trim());
-    ctx.font = `${Math.floor(w * subtitleScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-    ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.04);
-
-    // Play/pause icon (with bounce when toggled)
-    const iconSize = w * 0.038;
-    const iconY = cy + w*0.075 + 35;
-    ctx.save();
-    ctx.translate(0, isPlaying ? 0 : 0);
-    ctx.fillStyle = 'rgba(110,231,255,0.9)';
+    ctx.globalAlpha = 0.15; // Transparent
+    ctx.fillStyle = 'rgba(110,231,255,1)';
     if (isPlaying) {
       ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
       ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
@@ -1296,6 +1281,21 @@
       ctx.fill();
     }
     ctx.restore();
+
+    // Center text
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+    const timeScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-scale').trim());
+    ctx.font = `bold ${Math.floor(w * timeScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.save();
+    ctx.globalAlpha = isPlaying ? 1 : 0.6;
+    ctx.fillText(fmt(cur), cx, cy - w*0.01);
+    ctx.restore();
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle').trim();
+    const subtitleScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle-scale').trim());
+    ctx.font = `${Math.floor(w * subtitleScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+    ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.065);
   }
 
   // Init
