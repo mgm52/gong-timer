@@ -251,6 +251,37 @@
     }
   }
 
+  /* Cursor ring animations */
+  .cursor-ring-in {
+    animation: cursorRingIn 0.2s ease-out forwards;
+  }
+
+  .cursor-ring-out {
+    animation: cursorRingOut 0.15s ease-in forwards;
+  }
+
+  @keyframes cursorRingIn {
+    0% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes cursorRingOut {
+    0% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+  }
+
   @media (max-height: 640px) {
     .panel { padding: 10px; }
     button { padding: 8px 12px; font-size: var(--font-xs); }
@@ -319,6 +350,12 @@
   let dragStartAngle = 0; // angle at pointerdown
   let dragStartTime = 0;  // time at pointerdown
 
+  // Cursor ring animation state
+  let cursorRingVisible = false;
+  let cursorRingOpacity = 0;
+  let cursorRingScale = 1;
+  let cursorRingAnimating = false;
+
   // Easing factor for displayTime (0..1). Higher = snappier.
   const EASE = 0.18;
 
@@ -339,6 +376,8 @@
   // Animation durations
   const PLAY_PAUSE_LIFE = 600;
   const BUTTON_CLICK_LIFE = 400;
+  const CURSOR_RING_IN_DURATION = 200;
+  const CURSOR_RING_OUT_DURATION = 150;
 
   // Utilities
   function toSeconds(mmss) {
@@ -373,6 +412,64 @@
     let x = (a + Math.PI) % (2*Math.PI);
     if (x < 0) x += 2*Math.PI;
     return x - Math.PI; // -> [-PI, PI)
+  }
+
+  // Cursor ring animation functions
+  function animateCursorRingIn() {
+    if (cursorRingAnimating) return;
+    cursorRingAnimating = true;
+    cursorRingVisible = true;
+    const startTime = performance.now();
+
+    function animate() {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / CURSOR_RING_IN_DURATION, 1);
+
+      // Ease-out animation
+      const eased = 1 - Math.pow(1 - progress, 3);
+      cursorRingOpacity = eased;
+      cursorRingScale = 0.8 + (0.2 * eased);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        cursorRingAnimating = false;
+      }
+
+      draw();
+    }
+
+    animate();
+  }
+
+  function animateCursorRingOut() {
+    cursorRingAnimating = true;
+    const startTime = performance.now();
+    const startOpacity = cursorRingOpacity;
+    const startScale = cursorRingScale;
+
+    function animate() {
+      const elapsed = performance.now() - startTime;
+      const progress = Math.min(elapsed / CURSOR_RING_OUT_DURATION, 1);
+
+      // Ease-in animation from current values
+      const eased = Math.pow(progress, 2);
+      cursorRingOpacity = startOpacity * (1 - eased);
+      cursorRingScale = startScale - ((startScale - 0.8) * eased);
+
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      } else {
+        cursorRingVisible = false;
+        cursorRingAnimating = false;
+        cursorRingOpacity = 0;
+        cursorRingScale = 1;
+      }
+
+      draw();
+    }
+
+    animate();
   }
   function angleFromPointer(ev) {
     const rect = dial.getBoundingClientRect();
@@ -422,7 +519,12 @@
     // Add pulse animation for each gong sound
     pulses.push({ t: performance.now() });
 
-    try { a.currentTime = 0; a.play().catch(e => console.warn('play() blocked:', e)); }
+    try {
+      // Ensure audio is stopped before resetting
+      a.pause();
+      a.currentTime = 0;
+      a.play().catch(e => console.warn('play() blocked:', e));
+    }
     catch (e) { console.warn('play error:', e); }
   }
   function playMultipleGongs(isLastGong = false) {
@@ -631,6 +733,7 @@
       dragStartAngle = angleFromPointer(e);
       dragStartTime = currentTime;
       syncDisplayToCurrent();
+      animateCursorRingIn();
     }
   });
   dial.addEventListener('pointermove', (e) => {
@@ -662,7 +765,7 @@
       dragging = false;
       pausedTime = currentTime;
       if (isPlaying) startTimestamp = performance.now();
-      draw(); // Force redraw to hide cursor ring
+      animateCursorRingOut();
     }
   }
   dial.addEventListener('pointerup', stopDragging);
@@ -1049,11 +1152,17 @@
 
     // Button click animations now handled by CSS animations on DOM elements
 
-    // Cursor ring (rotates with current time indicator while dragging)
-    if (dragging) {
+    // Cursor ring (animated fade and scale)
+    if (cursorRingVisible && cursorRingOpacity > 0) {
       const currentTimeAngle = START_ANGLE + (displayTime / Math.max(totalDuration, 0.001)) * TAU;
       const cursorRingRadius = radius + ring * 0.8;
       const cursorRingThickness = 3 * DPR;
+
+      ctx.save();
+      ctx.globalAlpha = cursorRingOpacity;
+      ctx.translate(cx, cy);
+      ctx.scale(cursorRingScale, cursorRingScale);
+      ctx.translate(-cx, -cy);
 
       // Thin outer ring
       ctx.save();
@@ -1087,6 +1196,7 @@
         ctx.restore();
       }
 
+      ctx.restore();
       ctx.restore();
     }
 
@@ -1169,8 +1279,8 @@
     ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.04);
 
     // Play/pause icon (with bounce when toggled)
-    const iconSize = w * 0.028;
-    const iconY = cy + w*0.075 + 25;
+    const iconSize = w * 0.038;
+    const iconY = cy + w*0.075 + 35;
     ctx.save();
     ctx.translate(0, isPlaying ? 0 : 0);
     ctx.fillStyle = 'rgba(110,231,255,0.9)';
