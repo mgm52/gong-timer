@@ -319,18 +319,18 @@
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
-    <button id="rew" class="corner-btn corner-btn-pos1">- 30s</button>
+    <button id="rew" class="corner-btn corner-btn-pos1">-30s</button>
     <button id="threeQuarterGong" class="corner-btn corner-btn-pos2">•</button>
     <button id="halfGong" class="corner-btn corner-btn-pos3">••</button>
     <button id="quarterGong" class="corner-btn corner-btn-pos4">•••</button>
     <button id="fastForward" class="corner-btn corner-btn-pos5">>></button>
-    <button id="ff" class="corner-btn corner-btn-pos6">+ 30s</button>
+    <button id="ff" class="corner-btn corner-btn-pos6">+30s</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
-  <div style="text-align: center; color: var(--muted); font-size: var(--font-xs); font-weight: 600; letter-spacing: 0.5px;">
-    DYAD GONG TIMER<br>
-    <a href="https://enlightenment-intensives.org.uk" target="_blank" style="color: var(--muted); text-decoration: underline;">ENLIGHTENMENT-INTENSIVES.ORG.UK</a>
+  <div style="text-align: center; color: var(--ink); opacity: 0.5; font-size: var(--font-xs); font-weight: 600; letter-spacing: 0.5px;">
+    dyad gong timer<br>
+    <a href="https://enlightenment-intensives.org.uk" target="_blank" style="color: var(--ink); text-decoration: underline;">enlightenment-intensives.org.uk</a>
   </div>
 
 </div>
@@ -1304,17 +1304,19 @@
     if (isPlaying && !dragging) {
       const waveRadius = radius * 0.55;
       const waveTime = performance.now() * 0.001; // Convert to seconds
-      const rotationSpeed = 1.0; // Rotation speed (radians per second) - negative for counter-clockwise, faster
+      const rotationSpeed = 0.8; // Rotation speed (radians per second) - negative for counter-clockwise, faster
 
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(waveTime * rotationSpeed);
 
-      ctx.beginPath();
       const wavePoints = 120; // Number of points for smooth wave
       const waveAmplitude = 3 * DPR; // Wave height
       const waveFrequency = 8; // Number of waves around the circle
+      const outerRadius = radius * 0.58; // Outer boundary of the wave band
 
+      // Create the wave path (inner edge)
+      ctx.beginPath();
       for (let i = 0; i <= wavePoints; i++) {
         const angle = (i / wavePoints) * TAU;
         const waveOffset = Math.sin(angle * waveFrequency + waveTime * 2) * waveAmplitude;
@@ -1329,11 +1331,18 @@
         }
       }
 
+      // Add outer circle path (in reverse to create filled area)
+      for (let i = wavePoints; i >= 0; i--) {
+        const angle = (i / wavePoints) * TAU;
+        const x = outerRadius * Math.cos(angle);
+        const y = outerRadius * Math.sin(angle);
+        ctx.lineTo(x, y);
+      }
+
       ctx.closePath();
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
       ctx.globalAlpha = 0.2;
-      ctx.lineWidth = 1.5 * DPR;
-      ctx.stroke();
+      ctx.fill();
 
       ctx.restore();
     }
