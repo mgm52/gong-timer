@@ -1288,17 +1288,55 @@
 
     if (isPlaying) {
     innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.6)'));
-    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.95)'));    
+    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.95)'));
   } else {
       // Greyed out when paused
     innerGrad.addColorStop(0, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.95)'));
-    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.6)'));    
+    innerGrad.addColorStop(1, bg2Rgb.replace('rgb(', 'rgba(').replace(')', ',0.6)'));
   }
     ctx.fillStyle = innerGrad;
     ctx.fill();
     ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-border').trim();
     ctx.lineWidth = 2*DPR;
     ctx.stroke();
+
+    // Subtle rotating wave around inner glass (when playing and not dragging)
+    if (isPlaying && !dragging) {
+      const waveRadius = radius * 0.55;
+      const waveTime = performance.now() * 0.001; // Convert to seconds
+      const rotationSpeed = 1.0; // Rotation speed (radians per second) - negative for counter-clockwise, faster
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(waveTime * rotationSpeed);
+
+      ctx.beginPath();
+      const wavePoints = 120; // Number of points for smooth wave
+      const waveAmplitude = 3 * DPR; // Wave height
+      const waveFrequency = 8; // Number of waves around the circle
+
+      for (let i = 0; i <= wavePoints; i++) {
+        const angle = (i / wavePoints) * TAU;
+        const waveOffset = Math.sin(angle * waveFrequency + waveTime * 2) * waveAmplitude;
+        const r = waveRadius + waveOffset;
+        const x = r * Math.cos(angle);
+        const y = r * Math.sin(angle);
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      }
+
+      ctx.closePath();
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      ctx.globalAlpha = 0.2;
+      ctx.lineWidth = 1.5 * DPR;
+      ctx.stroke();
+
+      ctx.restore();
+    }
 
     // Play/pause icon (4x larger, transparent, behind time text)
     const iconSize = w * 0.152; // 4x larger (0.038 * 4)
