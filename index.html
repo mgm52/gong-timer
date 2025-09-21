@@ -93,7 +93,6 @@
     margin: 0;
     font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
     overflow: hidden;
-    filter: saturate(130%) hue-rotate(90deg);
   }
   html.paused body {
     background: radial-gradient(1400px 900px at 110% 120%, var(--gray-pause), transparent 50%),
@@ -1331,10 +1330,31 @@
     ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.065);
   }
 
+  // Time-based hue shift (9pm to 5am)
+  function updateHueShift() {
+    const now = new Date();
+    const hour = now.getHours();
+
+    // Check if current time is between 9pm and 5am
+    const isNightTime = hour >= 21 || hour < 5;
+
+    if (isNightTime) {
+      document.documentElement.style.filter = 'saturate(130%) hue-rotate(90deg)';
+    } else {
+      document.documentElement.style.filter = 'none';
+    }
+  }
+
   // Init
   // Set dark mode as default and paused state
   document.documentElement.setAttribute('data-theme', 'dark');
   document.documentElement.classList.add('paused');
+
+  // Initialize hue shift
+  updateHueShift();
+
+  // Update hue shift every minute
+  setInterval(updateHueShift, 60000);
 
   updateButtonStates();
   resizeCanvas();
