@@ -39,6 +39,19 @@
     --canvas-border: rgba(255,255,255,0.08);
     --canvas-label: rgba(233,238,247,0.75);
     --canvas-subtitle: rgba(255,255,255,0.55);
+    --gray-pause: rgba(190, 190, 190, 0.92);
+    --gray-dark: rgba(60,60,65,1);
+    --gray-darker: rgba(30,30,35,1);
+    --accent-15: rgba(68,159,239,.15);
+    --accent-92: rgba(110,231,255,.92);
+    --canvas-progress-start: rgba(110,231,255,0.95);
+    --canvas-progress-end: rgba(68,159,239,0.95);
+    --canvas-cursor-ring: rgba(110,231,255,0.6);
+    --canvas-cursor-glow: rgba(110,231,255,0.3);
+    --canvas-cursor-tick: rgba(110,231,255,0.4);
+    --canvas-time-indicator-glow: rgba(110,231,255,0.45);
+    --canvas-time-indicator: rgba(110,231,255,1);
+    --canvas-pulse-base: rgba(110,231,255,0.25);
   }
 
   [data-theme="light"] {
@@ -57,11 +70,24 @@
     --canvas-border: rgba(30,41,59,0.12);
     --canvas-label: rgba(30,41,59,0.8);
     --canvas-subtitle: rgba(30,41,59,0.6);
+    --gray-pause: rgba(190, 190, 190, 0.92);
+    --gray-dark: rgba(60,60,65,1);
+    --gray-darker: rgba(30,30,35,1);
+    --accent-15: rgba(68,159,239,.15);
+    --accent-92: rgba(110,231,255,.92);
+    --canvas-progress-start: rgba(2,132,199,0.95);
+    --canvas-progress-end: rgba(14,165,233,0.95);
+    --canvas-cursor-ring: rgba(2,132,199,0.6);
+    --canvas-cursor-glow: rgba(2,132,199,0.3);
+    --canvas-cursor-tick: rgba(2,132,199,0.4);
+    --canvas-time-indicator-glow: rgba(2,132,199,0.45);
+    --canvas-time-indicator: rgba(2,132,199,1);
+    --canvas-pulse-base: rgba(2,132,199,0.25);
   }
   html, body {
     height: 100%;
-    background: radial-gradient(1200px 800px at 20% -10%, rgba(68,159,239,.15), transparent 60%),
-                radial-gradient(1400px 900px at 110% 120%, rgba(110,231,255,.92), transparent 50%),
+    background: radial-gradient(1200px 800px at 20% -10%, var(--accent-15), transparent 60%),
+                radial-gradient(1400px 900px at 110% 120%, var(--accent-92), transparent 50%),
                 linear-gradient(180deg, var(--bg), var(--bg3) 60%);
     color: var(--ink);
     margin: 0;
@@ -69,7 +95,7 @@
     overflow: hidden;
   }
   html.paused body {
-    background: radial-gradient(1400px 900px at 110% 120%, rgba(190, 190, 190, 0.92), transparent 50%),
+    background: radial-gradient(1400px 900px at 110% 120%, var(--gray-pause), transparent 50%),
                 linear-gradient(0deg, var(--bg), var(--bg3) 60%);
   }
   * { box-sizing: border-box; }
@@ -783,7 +809,11 @@
   function createButtonClickAnimation(element) {
     const rect = element.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
+
+    // For corner buttons, position animation at the bottom of the button (where the text appears)
+    // instead of the geometric center
+    const isCornerBtn = element.classList.contains('corner-btn');
+    const y = isCornerBtn ? rect.bottom - 20 : rect.top + rect.height / 2;
 
     // Create animation element
     const animationEl = document.createElement('div');
@@ -849,8 +879,8 @@
 
     // Progress arc (gradient + glow) - now goes clockwise
     const progGrad = ctx.createLinearGradient(0, 0, w, 0);
-    progGrad.addColorStop(0, 'rgba(110,231,255,0.95)');
-    progGrad.addColorStop(1, 'rgba(68,159,239,0.95)');
+    progGrad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--canvas-progress-start').trim());
+    progGrad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--canvas-progress-end').trim());
     ctx.save();
     ctx.shadowColor = 'rgba(110,231,255,0.25)';
     ctx.shadowBlur = 18 * DPR;
@@ -1106,7 +1136,8 @@
       const r = radius + ring*0.75 + k * (ring*2);
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
-      ctx.strokeStyle = `rgba(110,231,255,${0.25 * (1 - k)})`;
+      const baseColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-pulse-base').trim();
+      ctx.strokeStyle = baseColor.replace('0.25', (0.25 * (1 - k)).toString());
       ctx.lineWidth = 8 * DPR * (1 - k);
       ctx.stroke();
     }
@@ -1134,16 +1165,17 @@
 
       // Colors without glow effect
       if (playPauseAnimations[i].isPlay) {
-        ctx.fillStyle = 'rgba(110,231,255,1)';
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
       } else {
-        ctx.fillStyle = 'rgba(60,60,65,1)';
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--gray-dark').trim();
       }
       ctx.fill();
 
       // Add stroke ring
       ctx.globalAlpha = (baseAlpha * 0.6) * 0.8;
       ctx.strokeStyle = playPauseAnimations[i].isPlay ?
-        'rgba(110,231,255,1)' : 'rgba(30,30,35,1)';
+        getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() :
+        getComputedStyle(document.documentElement).getPropertyValue('--gray-darker').trim();
       ctx.lineWidth = 6 * DPR;
       ctx.stroke();
 
@@ -1166,11 +1198,11 @@
 
       // Thin outer ring
       ctx.save();
-      ctx.shadowColor = 'rgba(110,231,255,0.3)';
+      ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-glow').trim();
       ctx.shadowBlur = 6 * DPR;
       ctx.beginPath();
       ctx.arc(cx, cy, cursorRingRadius, 0, TAU);
-      ctx.strokeStyle = 'rgba(110,231,255,0.6)';
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-ring').trim();
       ctx.lineWidth = cursorRingThickness;
       ctx.stroke();
       ctx.restore();
@@ -1190,7 +1222,7 @@
         ctx.beginPath();
         ctx.moveTo(tickInner * Math.cos(tickAngle), tickInner * Math.sin(tickAngle));
         ctx.lineTo(tickOuter * Math.cos(tickAngle), tickOuter * Math.sin(tickAngle));
-        ctx.strokeStyle = 'rgba(110,231,255,0.4)';
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-tick').trim();
         ctx.lineWidth = 10 * DPR;
         ctx.stroke();
         ctx.restore();
@@ -1205,13 +1237,13 @@
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
     ctx.save();
-    ctx.shadowColor = 'rgba(110,231,255,0.45)';
+    ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-indicator-glow').trim();
     ctx.shadowBlur = 10 * DPR;
     ctx.beginPath();
     ctx.moveTo(cx + lineStart*Math.cos(currentTimeAngle), cy + lineStart*Math.sin(currentTimeAngle));
     ctx.lineTo(cx + lineEnd*Math.cos(currentTimeAngle), cy + lineEnd*Math.sin(currentTimeAngle));
     ctx.lineWidth = 2*DPR;
-    ctx.strokeStyle = 'rgba(110,231,255,1)';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-indicator').trim();
     ctx.lineCap = 'butt';
     ctx.stroke();
     ctx.restore();
@@ -1268,7 +1300,7 @@
     const iconY = cy; // Centered in dial
     ctx.save();
     ctx.globalAlpha = 0.15; // Transparent
-    ctx.fillStyle = 'rgba(110,231,255,1)';
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
     if (isPlaying) {
       ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
       ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
