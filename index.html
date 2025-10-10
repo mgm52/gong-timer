@@ -312,10 +312,84 @@
     .panel { padding: 10px; }
     button { padding: 8px 12px; font-size: var(--font-xs); }
   }
+
+  /* Title Screen */
+  .title-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    z-index: 10000;
+  }
+  .title {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0;
+    text-align: center;
+    letter-spacing: -0.5px;
+  }
+  .subtitle {
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--muted);
+    margin: -16px 0 0 0;
+    text-align: center;
+  }
+  .button-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .title-btn {
+    font-size: 16px;
+    padding: 16px 32px;
+    min-width: 300px;
+    white-space: normal;
+    line-height: 1.4;
+  }
+  .title-btn-primary {
+    font-size: 20px;
+    padding: 20px 40px;
+    transform: scale(1.15);
+    background: linear-gradient(180deg, rgba(110,231,255,.15), rgba(68,159,239,.1));
+    border-color: rgba(110,231,255,.3);
+  }
+  .title-btn-primary:hover {
+    border-color: rgba(110,231,255,.6);
+    box-shadow: var(--glow);
+  }
+  @media (pointer: coarse) {
+    .title-btn {
+      font-size: 18px;
+      padding: 18px 36px;
+      min-width: 320px;
+    }
+    .title-btn-primary {
+      font-size: 22px;
+      padding: 22px 44px;
+    }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<div id="titleScreen" class="title-screen">
+  <h1 class="title">dyad gong timer</h1>
+  <p class="subtitle">by enlightenment-intensives.org.uk</p>
+  <div class="button-group">
+    <button id="btnNew" class="title-btn title-btn-primary">i have <strong>not</strong> used this app before</button>
+    <button id="btnReturning" class="title-btn">i have used this app before</button>
+  </div>
+</div>
+
+<div class="wrap" style="display: none;">
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
@@ -338,6 +412,28 @@
 
 <script>
 (() => {
+  // Title Screen Logic
+  const titleScreen = document.getElementById('titleScreen');
+  const btnReturning = document.getElementById('btnReturning');
+  const btnNew = document.getElementById('btnNew');
+  const mainWrap = document.querySelector('.wrap');
+
+  function showMainApp() {
+    titleScreen.style.display = 'none';
+    mainWrap.style.display = 'flex';
+  }
+
+  btnReturning.addEventListener('click', () => {
+    showMainApp();
+  });
+
+  btnNew.addEventListener('click', () => {
+    showMainApp();
+    setTimeout(() => {
+      alert('Welcome to the Dyad Gong Timer!\nThis app conducts 38-minute dyads consisting of 8 dyad cycles.\n\nAbout:\n• After each cycle, the app will play 3 gongs\n• At the end of the dyad, the app will play 5 gongs in quick succession\n\nControls:\n• Tap the center to pause/play\n• Drag your finger around the dial to change the current time\n• Use the buttons at the bottom to skip forward/back or jump to specific segments');
+    }, 300);
+  });
+
   // Config & Audio Assets
   const gongTimes = ["04:43","09:23","14:06","18:48","23:30","28:12","32:54","37:38"].map(toSeconds);
   const totalDuration = gongTimes[gongTimes.length - 1]; // 37:38
