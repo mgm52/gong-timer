@@ -397,7 +397,7 @@
     <button id="threeQuarterGong" class="corner-btn corner-btn-pos2">•</button>
     <button id="halfGong" class="corner-btn corner-btn-pos3">••</button>
     <button id="quarterGong" class="corner-btn corner-btn-pos4">•••</button>
-    <button id="fastForward" class="corner-btn corner-btn-pos5">>></button>
+    <button id="fastForward" class="corner-btn corner-btn-pos5">&gt;&gt;</button>
     <button id="ff" class="corner-btn corner-btn-pos6">+30s</button>
     <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber" style="margin-top: 50px;"></canvas>
   </div>
@@ -424,10 +424,12 @@
   }
 
   btnReturning.addEventListener('click', () => {
+    primeAudioIfNeeded();
     showMainApp();
   });
 
   btnNew.addEventListener('click', () => {
+    primeAudioIfNeeded();
     showMainApp();
     setTimeout(() => {
       alert('Welcome to the Dyad Gong Timer!\nThis app conducts 38-minute dyads consisting of 8 dyad cycles.\n\nAbout:\n• After each cycle, the app will play 3 gongs\n• At the end of the dyad, the app will play 5 gongs in quick succession\n\nControls:\n• Tap the center to pause/play\n• Drag your finger around the dial to change the current time\n• Use the buttons at the bottom to skip forward/back or jump to specific segments');
@@ -468,14 +470,8 @@
   let pointerDown = false;
   let lastGongIndex = -1;
   let gongTimeouts = [];
-  let pointerX = 0;
-  let pointerY = 0;
   let lastAngle = 0;
-  let currentPointerAngle = 0;
-
-  // Drag rotation state (for fixed indicator UX)
-  let dragStartAngle = 0; // angle at pointerdown
-  let dragStartTime = 0;  // time at pointerdown
+  let wakeLock = null;
 
   // Cursor ring animation state
   let cursorRingVisible = false;
@@ -489,8 +485,8 @@
   // Set scrub direction preference: false => clockwise increases time (reversed from original)
   const SCRUB_CLOCKWISE_INCREASES = false;
 
-  // Drawing metrics
-  const DPR = Math.max(1, window.devicePixelRatio || 1);
+  // Drawing metrics (refreshed on resize in case the window moves between displays)
+  let DPR = Math.max(1, window.devicePixelRatio || 1);
 
   // Pulse FX on each gong
   const pulses = []; // {t: timestamp(ms), life: 800}
@@ -528,13 +524,6 @@
   const TAU = Math.PI * 2;
   const START_ANGLE = -Math.PI / 2; // fixed indicator at top
 
-  function angleForTime(time, duration) {
-    return START_ANGLE + (time / Math.max(duration, 0.001)) * TAU;
-  }
-  function timeForAngle(angle, duration) {
-    const norm = (angle - START_ANGLE + TAU) % TAU;
-    return (norm / TAU) * duration;
-  }
   function normAngle(a) {
     let x = (a + Math.PI) % (2*Math.PI);
     if (x < 0) x += 2*Math.PI;
@@ -663,6 +652,7 @@
     setTimeout(() => nextGongDisplay.classList.remove('pulse'), 280);
 
     if (isLastGong && finalGongAudio) {
+      pulses.push({ t: performance.now() });
       try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
       catch (e) { console.warn('final gong play error:', e); }
     } else {
@@ -677,23 +667,41 @@
 
 
   // Timer
-  function updateTime() {
-    if (isPlaying && !dragging) {
-      const elapsed = (performance.now() - startTimestamp) / 1000;
-      currentTime = Math.min(pausedTime + elapsed, totalDuration);
-
-      // Trigger gongs when crossing timestamps
-      const currentGongIndex = gongTimes.findIndex(t => currentTime >= t && currentTime < t + 0.5 && lastGongIndex < gongTimes.indexOf(t));
-      if (currentGongIndex !== -1 && currentGongIndex > lastGongIndex) {
-        const isLastGong = currentGongIndex === gongTimes.length - 1;
-        playMultipleGongs(isLastGong);
-        lastGongIndex = currentGongIndex;
-      }
-      if (currentTime >= totalDuration) {
-        pause();
-        currentTime = totalDuration;
-      }
+  // Index of the last gong at or before `time` (-1 if none)
+  function gongIndexBefore(time) {
+    let idx = -1;
+    for (let i = 0; i < gongTimes.length; i++) {
+      if (gongTimes[i] <= time) idx = i;
     }
+    return idx;
+  }
+
+  // Advance logic time and fire any gong whose timestamp has been crossed.
+  // Runs from both the rAF loop and a setInterval so gongs still fire when
+  // rAF is throttled (background tab / locked screen).
+  function tickLogic() {
+    if (!isPlaying || dragging) return;
+    const elapsed = (performance.now() - startTimestamp) / 1000;
+    currentTime = Math.min(pausedTime + elapsed, totalDuration);
+
+    const crossedIndex = gongIndexBefore(currentTime);
+    if (crossedIndex > lastGongIndex) {
+      const isLastGong = crossedIndex === gongTimes.length - 1;
+      playMultipleGongs(isLastGong);
+      lastGongIndex = crossedIndex;
+    }
+    if (currentTime >= totalDuration) {
+      currentTime = totalDuration;
+      pause();
+    }
+  }
+
+  function scheduleFrame() {
+    if (rafId === null) rafId = requestAnimationFrame(updateTime);
+  }
+  function updateTime() {
+    rafId = null;
+    tickLogic();
 
     // Smooth UI easing toward currentTime
     const delta = currentTime - displayTime;
@@ -702,9 +710,22 @@
 
     draw();
 
-    // Keep animation loop running if playing or if there are active play/pause animations
-    const hasActiveAnimations = playPauseAnimations.length > 0;
-    if (isPlaying || hasActiveAnimations) rafId = requestAnimationFrame(updateTime);
+    // Keep animation loop running if playing or if there are active canvas animations
+    if (isPlaying || playPauseAnimations.length > 0 || pulses.length > 0) scheduleFrame();
+  }
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+      console.warn('Wake lock request failed:', err);
+    }
+  }
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
   }
   function play() {
     if (currentTime >= totalDuration) {
@@ -713,9 +734,10 @@
     isPlaying = true;
     startTimestamp = performance.now();
     pausedTime = currentTime;
-    rafId = requestAnimationFrame(updateTime);
-    updateInterval = setInterval(updateButtonStates, 1000);
+    scheduleFrame();
+    updateInterval = setInterval(() => { tickLogic(); updateButtonStates(); }, 500);
     document.documentElement.classList.remove('paused');
+    requestWakeLock();
 
     // Add play animation
     playPauseAnimations.push({ t: performance.now(), isPlay: true });
@@ -725,21 +747,36 @@
   function pause() {
     isPlaying = false;
     pausedTime = currentTime;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
     if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
     document.documentElement.classList.add('paused');
+    releaseWakeLock();
 
     // Add pause animation
     playPauseAnimations.push({ t: performance.now(), isPlay: false });
 
-    // Start animation loop for the pause animation
-    rafId = requestAnimationFrame(updateTime);
+    // Keep the animation loop running for the pause animation
+    scheduleFrame();
 
     draw();
   }
 
+  // Wake locks are released by the browser when the page is hidden;
+  // reacquire on return and resync the display immediately.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (isPlaying) {
+        requestWakeLock();
+        tickLogic();
+        syncDisplayToCurrent();
+      }
+      updateButtonStates();
+      draw();
+    }
+  });
+
   // Canvas sizing
   function resizeCanvas() {
+    DPR = Math.max(1, window.devicePixelRatio || 1);
     const rect = dial.getBoundingClientRect();
     dial.width  = rect.width  * DPR;
     dial.height = rect.height * DPR;
@@ -748,64 +785,38 @@
   new ResizeObserver(resizeCanvas).observe(dial);
 
   // Input Handlers
-  ffBtn.addEventListener('click', () => {
-    currentTime = Math.min(currentTime + 30, totalDuration);
+  // Jump to a new time, cancelling any in-progress gong sequence and marking
+  // skipped gongs as already fired so seeking never triggers them.
+  function seekTo(time) {
+    currentTime = Math.min(Math.max(time, 0), totalDuration);
     pausedTime = currentTime;
+    lastGongIndex = gongIndexBefore(currentTime);
+    gongTimeouts.forEach(timeout => clearTimeout(timeout));
+    gongTimeouts = [];
     if (isPlaying) startTimestamp = performance.now();
     else syncDisplayToCurrent();
     updateButtonStates();
     draw();
+  }
+
+  ffBtn.addEventListener('click', () => {
+    seekTo(currentTime + 30);
   });
   rewBtn.addEventListener('click', () => {
     if (currentTime === 0) return;
-    currentTime = Math.max(currentTime - 30, 0);
-    pausedTime = currentTime;
-    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
-    else syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
+    seekTo(currentTime - 30);
   });
   quarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
-    const quarterGongTime = gongTimes[1]; // 2nd gong (09:23)
-    currentTime = Math.min(Math.max(quarterGongTime + 5, 0), totalDuration);
-    pausedTime = currentTime;
-    lastGongIndex = 1; // so we're past the quarter gong
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
-    else syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
+    seekTo(gongTimes[1] + 5); // just past the 2nd gong (09:23)
   });
   halfGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
-    const middleGongTime = gongTimes[3]; // 4th gong (18:48)
-    currentTime = Math.min(Math.max(middleGongTime + 5, 0), totalDuration);
-    pausedTime = currentTime;
-    lastGongIndex = 3; // so we're past the middle gong
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
-    else syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
+    seekTo(gongTimes[3] + 5); // just past the 4th gong (18:48)
   });
   threeQuarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
-    const threeQuarterGongTime = gongTimes[5]; // 6th gong (28:12)
-    currentTime = Math.min(Math.max(threeQuarterGongTime + 5, 0), totalDuration);
-    pausedTime = currentTime;
-    lastGongIndex = 5; // so we're past the three-quarter gong
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
-    else syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
+    seekTo(gongTimes[5] + 5); // just past the 6th gong (28:12)
   });
   fastForwardBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
@@ -820,20 +831,13 @@
     }
 
     // Jump to 1 second before the end of current segment
-    currentTime = Math.max(currentSegmentEndTime - 1, currentTime);
-    pausedTime = currentTime;
-    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
-    else syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
+    seekTo(Math.max(currentSegmentEndTime - 1, currentTime));
   });
   window.addEventListener('keydown', async (e) => {
+    if (titleScreen.style.display !== 'none') return; // ignore shortcuts behind the title screen
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
-    if (e.key === 'ArrowRight') { currentTime = Math.min(currentTime + 5, totalDuration); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
-    if (e.key === 'ArrowLeft') { currentTime = Math.max(currentTime - 5, 0); pausedTime = currentTime; if (!isPlaying) syncDisplayToCurrent(); updateButtonStates(); draw(); }
+    if (e.key === 'ArrowRight') { seekTo(currentTime + 5); }
+    if (e.key === 'ArrowLeft') { seekTo(currentTime - 5); }
   }, {capture:true});
 
 
@@ -851,40 +855,21 @@
       if (isPlaying) pause(); else play();
     } else {
       dragging = true;
-      const r = dial.getBoundingClientRect();
-      pointerX = (e.clientX - r.left) * DPR;
-      pointerY = (e.clientY - r.top)  * DPR;
       // Removed pointer capture to prevent button interference
       lastAngle = angleFromPointer(e);
-      currentPointerAngle = angleFromPointer(e);
-      dragStartAngle = angleFromPointer(e);
-      dragStartTime = currentTime;
       syncDisplayToCurrent();
       animateCursorRingIn();
     }
   });
   dial.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    const r = dial.getBoundingClientRect();
-    pointerX = (e.clientX - r.left) * DPR;
-    pointerY = (e.clientY - r.top)  * DPR;
     const aNow = angleFromPointer(e);
-    currentPointerAngle = aNow;
     const smallDelta = normAngle(aNow - lastAngle);
     lastAngle = aNow;
     const signedSmallDelta = SCRUB_CLOCKWISE_INCREASES ? -smallDelta : smallDelta;
     const timeDelta = (signedSmallDelta / TAU) * totalDuration;
-    let newTime = currentTime + timeDelta;
-    newTime = Math.max(0, Math.min(totalDuration, newTime));
-    currentTime = newTime;
-    pausedTime = currentTime;
-    lastGongIndex = gongTimes.findIndex(t => t > currentTime) - 1;
-    gongTimeouts.forEach(timeout => clearTimeout(timeout));
-    gongTimeouts = [];
-    if (isPlaying) startTimestamp = performance.now();
+    seekTo(currentTime + timeDelta);
     syncDisplayToCurrent();
-    updateButtonStates();
-    draw();
   });
   function stopDragging(e){
     pointerDown = false;
