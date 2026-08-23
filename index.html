@@ -612,28 +612,37 @@
     }
     finalGongAudio = new Audio('./final_gongs.mp3');
   }
-  async function primeAudioIfNeeded() {
-    if (audioPrimed) return;
-    createGongPool();
-    try {
-      for (const a of gongPool) {
-        a.muted = true; await a.play(); a.pause(); a.currentTime = 0; a.muted = false;
-      }
-      if (finalGongAudio) {
-        finalGongAudio.muted = true; await finalGongAudio.play(); finalGongAudio.pause(); finalGongAudio.currentTime = 0; finalGongAudio.muted = false;
-      }
-      audioPrimed = true;
-    } catch (err) {
-      console.warn('Audio prime failed:', err);
+  let primePromise = null;
+  function primeAudioIfNeeded() {
+    if (audioPrimed) return Promise.resolve();
+    if (!primePromise) {
+      primePromise = (async () => {
+        createGongPool();
+        try {
+          for (const a of gongPool) {
+            a.muted = true; await a.play(); a.pause(); a.currentTime = 0; a.muted = false;
+          }
+          if (finalGongAudio) {
+            finalGongAudio.muted = true; await finalGongAudio.play(); finalGongAudio.pause(); finalGongAudio.currentTime = 0; finalGongAudio.muted = false;
+          }
+          audioPrimed = true;
+        } catch (err) {
+          console.warn('Audio prime failed:', err);
+        }
+        primePromise = null; // retry on the next user gesture if priming failed
+      })();
     }
+    return primePromise;
   }
   function playGongSound() {
     if (!audioPrimed || !gongPool.length) return;
     const a = gongPool[gongIndex];
     gongIndex = (gongIndex + 1) % gongPool.length;
 
-    // Add pulse animation for each gong sound
+    // Add pulse animation for each gong sound (delayed gongs can land after a
+    // pause, when no animation loop is running — make sure one animates it)
     pulses.push({ t: performance.now() });
+    scheduleFrame();
 
     try {
       // Ensure audio is stopped before resetting
@@ -653,6 +662,7 @@
 
     if (isLastGong && finalGongAudio) {
       pulses.push({ t: performance.now() });
+      scheduleFrame();
       try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
       catch (e) { console.warn('final gong play error:', e); }
     } else {
@@ -716,7 +726,12 @@
   async function requestWakeLock() {
     if (!('wakeLock' in navigator)) return;
     try {
-      wakeLock = await navigator.wakeLock.request('screen');
+      const lock = await navigator.wakeLock.request('screen');
+      // The request resolves asynchronously: playback may have stopped, or
+      // another request may have won in the meantime — don't leak a held lock.
+      if (!isPlaying) { lock.release().catch(() => {}); return; }
+      releaseWakeLock();
+      wakeLock = lock;
     } catch (err) {
       console.warn('Wake lock request failed:', err);
     }
