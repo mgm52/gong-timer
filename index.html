@@ -4,6 +4,13 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <title>Dyad Gong Timer</title>
+<meta name="theme-color" content="#0b0e14" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="preload" as="audio" href="./individual_gong.mp3">
 <link rel="preload" as="audio" href="./final_gongs.mp3">
 <style>
@@ -243,13 +250,14 @@
   canvas {
     width: 100%;
     height: 100%;
-    max-width: min(100%, 100dvh - 300px);
-    max-height: min(100%, 100dvh - 300px);
+    max-width: min(100%, max(220px, 100dvh - 300px));
+    max-height: min(100%, max(220px, 100dvh - 300px));
     display: block;
     touch-action: none;
     cursor: pointer;
     object-fit: contain;
     filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
+    margin-top: 50px;
   }
 
   /* Button click animation */
@@ -312,6 +320,85 @@
     .panel { padding: 10px; }
     button { padding: 8px 12px; font-size: var(--font-xs); }
   }
+  /* Short screens (landscape phones): reclaim vertical space for the dial */
+  @media (max-height: 520px) {
+    .wrap { padding: 8px; gap: 6px; }
+    canvas { margin-top: 8px; max-width: min(100%, max(180px, 100dvh - 120px)); max-height: min(100%, max(180px, 100dvh - 120px)); }
+    .footer-note { display: none; }
+    .next-gong-top { font-size: var(--font-xl); }
+    .paused-note, .time-text { font-size: var(--font-2xl); }
+  }
+
+  /* Help button */
+  .help-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 3;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: var(--font-lg);
+    color: var(--muted);
+    background: none;
+    border: 1px solid rgba(255,255,255,0.12);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Welcome / help overlay */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(4px);
+  }
+  .overlay[hidden] { display: none; }
+  .overlay-card {
+    max-width: 440px;
+    max-height: 85dvh;
+    overflow-y: auto;
+    background: linear-gradient(180deg, var(--bg2), var(--bg));
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .overlay-card h2 { margin: 0 0 12px 0; font-size: 22px; color: var(--ink); }
+  .overlay-card h3 { margin: 16px 0 6px 0; font-size: var(--font-sm); color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+  .overlay-card ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: var(--font-sm); line-height: 1.6; }
+  .overlay-card p { color: var(--muted); font-size: var(--font-sm); line-height: 1.6; margin: 8px 0; }
+  .overlay-card .btn-accent { margin-top: 18px; width: 100%; }
+
+  /* Toast notifications */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: max(120px, calc(120px + env(safe-area-inset-bottom)));
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: var(--bg2);
+    border: 1px solid rgba(255,255,255,0.16);
+    color: var(--ink);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: var(--font-sm);
+    font-weight: 600;
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .25s ease, transform .25s ease;
+    max-width: 85vw;
+    text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(-6px); }
 
   /* Title Screen */
   .title-screen {
@@ -386,23 +473,52 @@
   <div class="button-group">
     <button id="btnNew" class="title-btn title-btn-primary">i have <strong>not</strong> used this app before</button>
     <button id="btnReturning" class="title-btn">i have used this app before</button>
+    <button id="btnResume" class="title-btn" hidden>resume previous session</button>
+    <button id="btnTestGong" class="title-btn">&#128365; play a test gong<br><small style="font-weight:400;color:var(--muted)">check your volume before starting</small></button>
   </div>
 </div>
+
+<div id="welcomeOverlay" class="overlay" hidden>
+  <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
+    <h2 id="overlayTitle">Welcome to the Dyad Gong Timer</h2>
+    <p>This app conducts 38-minute dyads consisting of 8 cycles.</p>
+    <h3>About</h3>
+    <ul>
+      <li>After each cycle, 3 gongs play</li>
+      <li>At the end of the dyad, 5 gongs play in quick succession</li>
+    </ul>
+    <h3>Controls</h3>
+    <ul>
+      <li>Tap the center of the dial to pause / play</li>
+      <li>Drag around the dial ring to change the current time</li>
+      <li>The bottom buttons skip &plusmn;30s, jump to the quarter points (&bull; &bull;&bull; &bull;&bull;&bull;), or skip to just before the next gong (&gt;&gt;)</li>
+    </ul>
+    <h3>Tips</h3>
+    <ul>
+      <li>Turn your volume up &mdash; use the test gong on the title screen</li>
+      <li>Keep this page open during the session</li>
+    </ul>
+    <button id="overlayClose" class="btn-accent">got it</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <div class="wrap" style="display: none;">
 
   <div class="panel canvas-panel">
     <div id="nextGongDisplay" class="next-gong-top"></div>
-    <button id="rew" class="corner-btn corner-btn-pos1">-30s</button>
-    <button id="threeQuarterGong" class="corner-btn corner-btn-pos2">•</button>
-    <button id="halfGong" class="corner-btn corner-btn-pos3">••</button>
-    <button id="quarterGong" class="corner-btn corner-btn-pos4">•••</button>
-    <button id="fastForward" class="corner-btn corner-btn-pos5">&gt;&gt;</button>
-    <button id="ff" class="corner-btn corner-btn-pos6">+30s</button>
-    <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber" style="margin-top: 50px;"></canvas>
+    <button id="helpBtn" class="help-btn" aria-label="Show instructions" title="Instructions">?</button>
+    <button id="rew" class="corner-btn corner-btn-pos1" aria-label="Back 30 seconds" title="Back 30 seconds">-30s</button>
+    <button id="threeQuarterGong" class="corner-btn corner-btn-pos2" aria-label="Jump to three-quarter point (28:17)" title="Jump to three-quarter point (28:17)">•</button>
+    <button id="halfGong" class="corner-btn corner-btn-pos3" aria-label="Jump to halfway point (18:53)" title="Jump to halfway point (18:53)">••</button>
+    <button id="quarterGong" class="corner-btn corner-btn-pos4" aria-label="Jump to quarter point (09:28)" title="Jump to quarter point (09:28)">•••</button>
+    <button id="fastForward" class="corner-btn corner-btn-pos5" aria-label="Skip to just before the next gong" title="Skip to just before the next gong">&gt;&gt;</button>
+    <button id="ff" class="corner-btn corner-btn-pos6" aria-label="Forward 30 seconds" title="Forward 30 seconds">+30s</button>
+    <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
   </div>
 
-  <div style="text-align: center; color: var(--ink); opacity: 0.6; font-size: var(--font-xs); font-weight: 350; letter-spacing: 1px;">
+  <div class="footer-note" style="text-align: center; color: var(--ink); opacity: 0.6; font-size: var(--font-xs); font-weight: 350; letter-spacing: 1px;">
     dyad gong timer<br>
     <a href="https://enlightenment-intensives.org.uk" target="_blank" style="color: var(--ink); text-decoration: underline;">enlightenment-intensives.org.uk</a>
   </div>
@@ -416,11 +532,31 @@
   const titleScreen = document.getElementById('titleScreen');
   const btnReturning = document.getElementById('btnReturning');
   const btnNew = document.getElementById('btnNew');
+  const btnResume = document.getElementById('btnResume');
+  const btnTestGong = document.getElementById('btnTestGong');
+  const welcomeOverlay = document.getElementById('welcomeOverlay');
+  const overlayClose = document.getElementById('overlayClose');
+  const helpBtn = document.getElementById('helpBtn');
+  const toastEl = document.getElementById('toast');
   const mainWrap = document.querySelector('.wrap');
 
   function showMainApp() {
     titleScreen.style.display = 'none';
     mainWrap.style.display = 'flex';
+    initSessionAudio();
+  }
+  function showOverlay() { welcomeOverlay.hidden = false; overlayClose.focus(); }
+  function hideOverlay() { welcomeOverlay.hidden = true; }
+  overlayClose.addEventListener('click', hideOverlay);
+  welcomeOverlay.addEventListener('click', (e) => { if (e.target === welcomeOverlay) hideOverlay(); });
+  helpBtn.addEventListener('click', (e) => { e.stopPropagation(); showOverlay(); helpBtn.blur(); });
+
+  let toastTimeout = null;
+  function showToast(message, duration = 2200) {
+    toastEl.textContent = message;
+    toastEl.classList.add('show');
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => toastEl.classList.remove('show'), duration);
   }
 
   btnReturning.addEventListener('click', () => {
@@ -431,9 +567,47 @@
   btnNew.addEventListener('click', () => {
     primeAudioIfNeeded();
     showMainApp();
-    setTimeout(() => {
-      alert('Welcome to the Dyad Gong Timer!\nThis app conducts 38-minute dyads consisting of 8 dyad cycles.\n\nAbout:\n• After each cycle, the app will play 3 gongs\n• At the end of the dyad, the app will play 5 gongs in quick succession\n\nControls:\n• Tap the center to pause/play\n• Drag your finger around the dial to change the current time\n• Use the buttons at the bottom to skip forward/back or jump to specific segments');
-    }, 300);
+    showOverlay();
+  });
+
+  btnTestGong.addEventListener('click', async () => {
+    await primeAudioIfNeeded();
+    if (audioPrimed) playGongSound();
+    else showToast('audio is blocked — check your browser settings');
+  });
+
+  // Saved session (resume after an accidental refresh / close)
+  const SAVE_KEY = 'gongTimerSession';
+  const SAVE_MAX_AGE = 12 * 60 * 60 * 1000; // 12h
+  function saveSession() {
+    try {
+      if (currentTime > 15 && currentTime < totalDuration - 5) {
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ t: currentTime, at: Date.now() }));
+      }
+    } catch (e) {}
+  }
+  function clearSavedSession() {
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+  }
+  function readSavedSession() {
+    try {
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const s = JSON.parse(raw);
+      if (typeof s.t !== 'number' || s.t <= 15 || s.t >= totalDuration - 5) return null;
+      if (Date.now() - s.at > SAVE_MAX_AGE) return null;
+      return s;
+    } catch (e) { return null; }
+  }
+
+  btnResume.addEventListener('click', () => {
+    const saved = readSavedSession();
+    primeAudioIfNeeded();
+    showMainApp();
+    if (saved) {
+      seekTo(saved.t);
+      showToast(`resumed at ${fmt(saved.t)} — tap the center to continue`);
+    }
   });
 
   // Config & Audio Assets
@@ -446,6 +620,14 @@
   let gongIndex = 0;
   let audioPrimed = false;
   let finalGongAudio = null;
+
+  // Full pre-mixed session track: all gongs baked in at their timestamps.
+  // When it plays, it is the master clock — a plain media stream keeps
+  // playing (and gonging) through screen lock and tab backgrounding, which
+  // JS timers cannot guarantee. The pool-based gongs remain as a fallback.
+  let sessionAudio = null;
+  let audioDriven = false;
+  let wakeLockHintShown = false;
 
   // DOM
   const ffBtn = document.getElementById('ff');
@@ -472,6 +654,9 @@
   let gongTimeouts = [];
   let lastAngle = 0;
   let wakeLock = null;
+  let lastDisplayHTML = null;
+  let lastDisplayColor = null;
+  let lastDrawTime = 0;
 
   // Cursor ring animation state
   let cursorRingVisible = false;
@@ -506,6 +691,18 @@
   function toSeconds(mmss) {
     const [m, s] = mmss.split(':').map(Number);
     return (m||0) * 60 + (s||0);
+  }
+  // Cached CSS custom property lookups — getComputedStyle dozens of times per
+  // frame is a real battery cost over a 38-minute always-on session. The
+  // theme never changes at runtime, so values are read once.
+  const cssVarCache = {};
+  function cssVar(name) {
+    let v = cssVarCache[name];
+    if (v === undefined) {
+      v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      cssVarCache[name] = v;
+    }
+    return v;
   }
   function hexToRgb(hex) {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -605,6 +802,55 @@
   }
 
   // Audio setup
+  function initSessionAudio() {
+    if (sessionAudio) return;
+    sessionAudio = new Audio('./full_session.mp3');
+    sessionAudio.preload = 'auto';
+    // If the track dies mid-session (decode error, file truncated), fall
+    // back to the JS-timed pool gongs without losing the user's position.
+    sessionAudio.addEventListener('ended', () => {
+      if (isPlaying && currentTime < totalDuration - 1) {
+        audioDriven = false;
+        pausedTime = currentTime;
+        startTimestamp = performance.now();
+        primeAudioIfNeeded();
+      }
+    });
+    sessionAudio.addEventListener('error', () => {
+      if (audioDriven) {
+        audioDriven = false;
+        pausedTime = currentTime;
+        startTimestamp = performance.now();
+      }
+      primeAudioIfNeeded();
+    });
+    setupMediaSession();
+  }
+  function setupMediaSession() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Dyad Gong Timer',
+        artist: 'enlightenment-intensives.org.uk',
+      });
+      navigator.mediaSession.setActionHandler('play', () => { if (!isPlaying) play(); });
+      navigator.mediaSession.setActionHandler('pause', () => { if (isPlaying) pause(); });
+      navigator.mediaSession.setActionHandler('seekbackward', () => seekTo(currentTime - 30));
+      navigator.mediaSession.setActionHandler('seekforward', () => seekTo(currentTime + 30));
+      navigator.mediaSession.setActionHandler('seekto', (d) => { if (typeof d.seekTime === 'number') seekTo(d.seekTime); });
+    } catch (e) {}
+  }
+  function updateMediaSessionState() {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+      navigator.mediaSession.setPositionState({
+        duration: totalDuration,
+        playbackRate: 1,
+        position: Math.min(currentTime, totalDuration),
+      });
+    } catch (e) {}
+  }
   function createGongPool() {
     if (gongPool.length) return;
     for (let i = 0; i < GONG_POOL_SIZE; i++) {
@@ -652,7 +898,12 @@
     }
     catch (e) { console.warn('play error:', e); }
   }
-  function playMultipleGongs(isLastGong = false) {
+  function addGongPulse() {
+    pulses.push({ t: performance.now() });
+    scheduleFrame();
+  }
+  // soundless: the session track already carries the gong audio — only visuals
+  function playMultipleGongs(isLastGong = false, soundless = false) {
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
 
@@ -660,16 +911,17 @@
     nextGongDisplay.classList.add('pulse');
     setTimeout(() => nextGongDisplay.classList.remove('pulse'), 280);
 
-    if (isLastGong && finalGongAudio) {
-      pulses.push({ t: performance.now() });
-      scheduleFrame();
-      try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
-      catch (e) { console.warn('final gong play error:', e); }
+    if (isLastGong) {
+      addGongPulse();
+      if (!soundless && finalGongAudio) {
+        try { finalGongAudio.currentTime = 0; finalGongAudio.play().catch(e => console.warn('final gong play() blocked:', e)); }
+        catch (e) { console.warn('final gong play error:', e); }
+      }
     } else {
       const numGongs = 3;
-      playGongSound();
+      if (soundless) addGongPulse(); else playGongSound();
       for (let i = 1; i < numGongs; i++) {
-        const timeout = setTimeout(() => playGongSound(), GONG_DELAY * i);
+        const timeout = setTimeout(() => { if (soundless) addGongPulse(); else playGongSound(); }, GONG_DELAY * i);
         gongTimeouts.push(timeout);
       }
     }
@@ -689,20 +941,31 @@
   // Advance logic time and fire any gong whose timestamp has been crossed.
   // Runs from both the rAF loop and a setInterval so gongs still fire when
   // rAF is throttled (background tab / locked screen).
+  let lastSaveTime = 0;
   function tickLogic() {
     if (!isPlaying || dragging) return;
-    const elapsed = (performance.now() - startTimestamp) / 1000;
-    currentTime = Math.min(pausedTime + elapsed, totalDuration);
+    if (audioDriven && sessionAudio && !sessionAudio.paused && sessionAudio.readyState >= 2) {
+      // The playing media stream is the source of truth: sound and clock
+      // can never disagree, even if the stream stalls to buffer.
+      currentTime = Math.min(sessionAudio.currentTime, totalDuration);
+    } else {
+      const elapsed = (performance.now() - startTimestamp) / 1000;
+      currentTime = Math.min(pausedTime + elapsed, totalDuration);
+    }
 
     const crossedIndex = gongIndexBefore(currentTime);
     if (crossedIndex > lastGongIndex) {
       const isLastGong = crossedIndex === gongTimes.length - 1;
-      playMultipleGongs(isLastGong);
+      playMultipleGongs(isLastGong, audioDriven);
       lastGongIndex = crossedIndex;
     }
+
+    const now = performance.now();
+    if (now - lastSaveTime > 5000) { lastSaveTime = now; saveSession(); }
+
     if (currentTime >= totalDuration) {
       currentTime = totalDuration;
-      pause();
+      pause(true);
     }
   }
 
@@ -713,12 +976,22 @@
     rafId = null;
     tickLogic();
 
-    // Smooth UI easing toward currentTime
-    const delta = currentTime - displayTime;
-    displayTime += delta * (dragging ? 0.35 : EASE);
-    if (Math.abs(delta) < 0.015) displayTime = currentTime; // snap when close
+    // During steady playback nothing on screen moves fast, so ~15fps is
+    // plenty — over a 38-minute always-on session this meaningfully cuts
+    // battery drain. Transient animations still render at full rate.
+    const transient = dragging || playPauseAnimations.length > 0 || pulses.length > 0 ||
+      cursorRingVisible || Math.abs(currentTime - displayTime) > 0.5;
+    const now = performance.now();
+    if (transient || now - lastDrawTime >= 66) {
+      lastDrawTime = now;
 
-    draw();
+      // Smooth UI easing toward currentTime
+      const delta = currentTime - displayTime;
+      displayTime += delta * (dragging ? 0.35 : EASE);
+      if (Math.abs(delta) < 0.015) displayTime = currentTime; // snap when close
+
+      draw();
+    }
 
     // Keep animation loop running if playing or if there are active canvas animations
     if (isPlaying || playPauseAnimations.length > 0 || pulses.length > 0) scheduleFrame();
@@ -754,17 +1027,55 @@
     document.documentElement.classList.remove('paused');
     requestWakeLock();
 
+    // Prefer the pre-mixed session track (keeps sounding through screen
+    // lock); fall back to JS-timed gongs if it can't start.
+    initSessionAudio();
+    if (sessionAudio) {
+      try { sessionAudio.currentTime = currentTime; } catch (e) {}
+      sessionAudio.play().then(() => {
+        if (!isPlaying) { sessionAudio.pause(); return; } // paused again before playback started
+        // If the pre-play seek was lost (metadata not yet loaded), fix the
+        // position before letting the audio clock take over.
+        try {
+          if (Math.abs(sessionAudio.currentTime - currentTime) > 0.75) {
+            sessionAudio.currentTime = currentTime;
+          }
+        } catch (e) {}
+        audioDriven = true;
+        updateMediaSessionState();
+      }).catch(() => {
+        audioDriven = false;
+        primeAudioIfNeeded();
+        maybeShowWakeLockHint();
+      });
+    } else {
+      primeAudioIfNeeded();
+      maybeShowWakeLockHint();
+    }
+    updateMediaSessionState();
+
     // Add play animation
     playPauseAnimations.push({ t: performance.now(), isPlay: true });
 
     draw();
   }
-  function pause() {
+  // atEnd: session finished naturally — let the final gongs in the session
+  // track ring out instead of cutting them off.
+  function pause(atEnd = false) {
     isPlaying = false;
     pausedTime = currentTime;
     if (updateInterval) { clearInterval(updateInterval); updateInterval = null; }
     document.documentElement.classList.add('paused');
     releaseWakeLock();
+
+    if (sessionAudio && !atEnd) sessionAudio.pause();
+    if (!atEnd) {
+      // A user pause silences the rest of an in-flight gong sequence
+      gongTimeouts.forEach(timeout => clearTimeout(timeout));
+      gongTimeouts = [];
+    }
+    if (atEnd) clearSavedSession(); else saveSession();
+    updateMediaSessionState();
 
     // Add pause animation
     playPauseAnimations.push({ t: performance.now(), isPlay: false });
@@ -773,6 +1084,11 @@
     scheduleFrame();
 
     draw();
+  }
+  function maybeShowWakeLockHint() {
+    if (wakeLockHintShown || ('wakeLock' in navigator)) return;
+    wakeLockHintShown = true;
+    showToast('keep your screen on — gongs stop if the display locks', 5000);
   }
 
   // Wake locks are released by the browser when the page is hidden;
@@ -808,8 +1124,12 @@
     lastGongIndex = gongIndexBefore(currentTime);
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
+    if (sessionAudio && (audioDriven || !sessionAudio.paused)) {
+      try { sessionAudio.currentTime = currentTime; } catch (e) {}
+    }
     if (isPlaying) startTimestamp = performance.now();
     else syncDisplayToCurrent();
+    updateMediaSessionState();
     updateButtonStates();
     draw();
   }
@@ -824,14 +1144,17 @@
   quarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     seekTo(gongTimes[1] + 5); // just past the 2nd gong (09:23)
+    showToast(`jumped to quarter point — ${fmt(currentTime)}`);
   });
   halfGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     seekTo(gongTimes[3] + 5); // just past the 4th gong (18:48)
+    showToast(`jumped to halfway point — ${fmt(currentTime)}`);
   });
   threeQuarterGongBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
     seekTo(gongTimes[5] + 5); // just past the 6th gong (28:12)
+    showToast(`jumped to three-quarter point — ${fmt(currentTime)}`);
   });
   fastForwardBtn.addEventListener('click', async () => {
     await primeAudioIfNeeded();
@@ -847,9 +1170,12 @@
 
     // Jump to 1 second before the end of current segment
     seekTo(Math.max(currentSegmentEndTime - 1, currentTime));
+    showToast(`skipped to ${fmt(currentTime)} — next gong imminent`);
   });
   window.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape' && !welcomeOverlay.hidden) { hideOverlay(); return; }
     if (titleScreen.style.display !== 'none') return; // ignore shortcuts behind the title screen
+    if (!welcomeOverlay.hidden) return;               // ...and behind the help overlay
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
     if (e.key === 'ArrowRight') { seekTo(currentTime + 5); }
     if (e.key === 'ArrowLeft') { seekTo(currentTime - 5); }
@@ -857,15 +1183,23 @@
 
 
   // Canvas interactions — fixed indicator, rotate dial while dragging
+  let activePointerId = null;
   dial.addEventListener('pointerdown', async (e) => {
     e.preventDefault(); // Prevent default touch behaviors
-    await primeAudioIfNeeded();
+    if (activePointerId !== null) return; // a second finger never steers the dial
     const centerDistance = distanceFromCenter(e);
     const rect = dial.getBoundingClientRect();
     const cssRadius = Math.min(rect.width, rect.height) * 0.38;
     const centerRadius = cssRadius * 0.6;
+    const outerGrabRadius = cssRadius * 1.4;
 
+    // Dead zone beyond the ring: canvas corners don't scrub (guards against
+    // accidental brushes during a session)
+    if (centerDistance > outerGrabRadius) return;
+
+    activePointerId = e.pointerId;
     pointerDown = true;
+    await primeAudioIfNeeded();
     if (centerDistance < centerRadius) {
       if (isPlaying) pause(); else play();
     } else {
@@ -877,7 +1211,7 @@
     }
   });
   dial.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
+    if (!dragging || e.pointerId !== activePointerId) return;
     const aNow = angleFromPointer(e);
     const smallDelta = normAngle(aNow - lastAngle);
     lastAngle = aNow;
@@ -887,6 +1221,8 @@
     syncDisplayToCurrent();
   });
   function stopDragging(e){
+    if (e && e.pointerId !== undefined && activePointerId !== null && e.pointerId !== activePointerId) return;
+    activePointerId = null;
     pointerDown = false;
     if (dragging) {
       dragging = false;
@@ -941,6 +1277,7 @@
     btn.addEventListener('click', (e) => {
       e.stopPropagation(); // Prevent canvas from interfering
       createButtonClickAnimation(btn); // Add click animation
+      btn.blur(); // so a later Space press toggles play/pause, not this button
     });
   });
 
@@ -965,8 +1302,8 @@
 
     // Base ring (with gradient)
     const baseGrad = ctx.createLinearGradient(0, 0, 0, h);
-    baseGrad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--canvas-ring').trim());
-    baseGrad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--canvas-ring-end').trim());
+    baseGrad.addColorStop(0, cssVar('--canvas-ring'));
+    baseGrad.addColorStop(1, cssVar('--canvas-ring-end'));
     ctx.beginPath();
     ctx.arc(cx, cy, radius, 0, TAU);
     ctx.lineWidth = ring;
@@ -980,8 +1317,8 @@
 
     // Progress arc (gradient + glow) - now goes clockwise
     const progGrad = ctx.createLinearGradient(0, 0, w, 0);
-    progGrad.addColorStop(0, getComputedStyle(document.documentElement).getPropertyValue('--canvas-progress-start').trim());
-    progGrad.addColorStop(1, getComputedStyle(document.documentElement).getPropertyValue('--canvas-progress-end').trim());
+    progGrad.addColorStop(0, cssVar('--canvas-progress-start'));
+    progGrad.addColorStop(1, cssVar('--canvas-progress-end'));
     ctx.save();
     ctx.shadowColor = 'rgba(110,231,255,0.25)';
     ctx.shadowBlur = 18 * DPR;
@@ -1007,7 +1344,7 @@
       ctx.moveTo(inner*Math.cos(a), inner*Math.sin(a));
       ctx.lineTo(outer*Math.cos(a), outer*Math.sin(a));
       ctx.lineWidth = (m % 5 === 0) ? 3*DPR : 1.5*DPR;
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-tick').trim();
+      ctx.strokeStyle = cssVar('--canvas-tick');
       ctx.stroke();
     }
 
@@ -1025,7 +1362,7 @@
       ctx.moveTo(r0*Math.cos(a), r0*Math.sin(a));
       ctx.lineTo(r1*Math.cos(a), r1*Math.sin(a));
       ctx.lineWidth = lineWidth;
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+      ctx.strokeStyle = cssVar('--canvas-marker');
       ctx.stroke();
 
       // Add dots above markers
@@ -1036,32 +1373,32 @@
       if (index === 1) { // Quarter mark - 3 dots
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a) - dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
 
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
 
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a) + dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
       } else if (index === 3) { // Half mark - 2 dots
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a) - dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
 
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a) + dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
       } else if (index === 5) { // Three-quarter mark - 1 dot
         ctx.beginPath();
         ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-marker').trim();
+        ctx.fillStyle = cssVar('--canvas-marker');
         ctx.fill();
       }
     });
@@ -1130,9 +1467,9 @@
     }
 
     // Static labels (inside dial)
-    const labelScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-label-scale').trim());
+    const labelScale = parseFloat(cssVar('--canvas-label-scale'));
     const fontSize = Math.max(10, Math.floor(w * labelScale));
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim();
+    ctx.fillStyle = cssVar('--canvas-label');
     ctx.font = `${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1209,13 +1546,13 @@
       // Set color based on segment state
       if (i === currentSegmentIndex) {
         // Current segment: ink color at 1.0 opacity
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
+        ctx.fillStyle = cssVar('--ink');
       } else if (i < currentSegmentIndex) {
         // Previous segments: accent color at 1.0 opacity
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+        ctx.fillStyle = cssVar('--accent');
       } else {
         // Future segments: default color at 0.35 opacity
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-label').trim().replace(/[\d.]+\)$/, '0.35)');
+        ctx.fillStyle = cssVar('--canvas-label').replace(/[\d.]+\)$/, '0.35)');
       }
 
       // Rotate each number to be perpendicular to its position on the dial
@@ -1237,7 +1574,7 @@
       const r = radius + ring*0.75 + k * (ring*2);
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
-      const baseColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-pulse-base').trim();
+      const baseColor = cssVar('--canvas-pulse-base');
       ctx.strokeStyle = baseColor.replace('0.25', (0.25 * (1 - k)).toString());
       ctx.lineWidth = 8 * DPR * (1 - k);
       ctx.stroke();
@@ -1266,17 +1603,17 @@
 
       // Colors without glow effect
       if (playPauseAnimations[i].isPlay) {
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+        ctx.fillStyle = cssVar('--accent');
       } else {
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--gray-dark').trim();
+        ctx.fillStyle = cssVar('--gray-dark');
       }
       ctx.fill();
 
       // Add stroke ring
       ctx.globalAlpha = (baseAlpha * 0.6) * 0.8;
       ctx.strokeStyle = playPauseAnimations[i].isPlay ?
-        getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() :
-        getComputedStyle(document.documentElement).getPropertyValue('--gray-darker').trim();
+        cssVar('--accent') :
+        cssVar('--gray-darker');
       ctx.lineWidth = 6 * DPR;
       ctx.stroke();
 
@@ -1299,11 +1636,11 @@
 
       // Thin outer ring
       ctx.save();
-      ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-glow').trim();
+      ctx.shadowColor = cssVar('--canvas-cursor-glow');
       ctx.shadowBlur = 6 * DPR;
       ctx.beginPath();
       ctx.arc(cx, cy, cursorRingRadius, 0, TAU);
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-ring').trim();
+      ctx.strokeStyle = cssVar('--canvas-cursor-ring');
       ctx.lineWidth = cursorRingThickness;
       ctx.stroke();
       ctx.restore();
@@ -1323,7 +1660,7 @@
         ctx.beginPath();
         ctx.moveTo(tickInner * Math.cos(tickAngle), tickInner * Math.sin(tickAngle));
         ctx.lineTo(tickOuter * Math.cos(tickAngle), tickOuter * Math.sin(tickAngle));
-        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-cursor-tick').trim();
+        ctx.strokeStyle = cssVar('--canvas-cursor-tick');
         ctx.lineWidth = 10 * DPR;
         ctx.stroke();
         ctx.restore();
@@ -1338,19 +1675,20 @@
     const lineStart = radius - ring*0.7;
     const lineEnd = radius + ring*0.7;
     ctx.save();
-    ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-indicator-glow').trim();
+    ctx.shadowColor = cssVar('--canvas-time-indicator-glow');
     ctx.shadowBlur = 10 * DPR;
     ctx.beginPath();
     ctx.moveTo(cx + lineStart*Math.cos(currentTimeAngle), cy + lineStart*Math.sin(currentTimeAngle));
     ctx.lineTo(cx + lineEnd*Math.cos(currentTimeAngle), cy + lineEnd*Math.sin(currentTimeAngle));
     ctx.lineWidth = 2*DPR;
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-indicator').trim();
+    ctx.strokeStyle = cssVar('--canvas-time-indicator');
     ctx.lineCap = 'butt';
     ctx.stroke();
     ctx.restore();
 
-    // Next gong display
+    // Next gong display (DOM only touched when the rendered state changes)
     const nextGongTime = gongTimes.find(t => t > currentTime);
+    let displayHTML, displayColor;
     if (nextGongTime) {
       const remaining = nextGongTime - currentTime;
       const remainingSecs = Math.max(0, Math.ceil(remaining));
@@ -1360,26 +1698,31 @@
       const text = `<div class="next-gong-text">next gong in</div> <span class="time-text">${timeText}</span>`;
       const pausedNote = !isPlaying ?
         (currentTime === 0 ? `<div class="tap-note">tap ▸ to start</div>` : `<div class="paused-note">paused</div>`) : '';
-      nextGongDisplay.innerHTML = text + pausedNote;
+      displayHTML = text + pausedNote;
       if (isPlaying) {
         // Gradually transition from accent to ink color as time gets closer
-        const progress = Math.max(0, Math.min(1, (60 - remaining) / 60));
-        const accentColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
-        const inkColor = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-        nextGongDisplay.style.color = remaining <= 60 ? `color-mix(in srgb, ${inkColor} ${progress * 100}%, ${accentColor})` : accentColor;
+        // (quantized to whole seconds so the style only changes once per second)
+        const progress = Math.max(0, Math.min(1, (60 - remainingSecs) / 60));
+        const accentColor = cssVar('--accent');
+        const inkColor = cssVar('--ink');
+        displayColor = remainingSecs <= 60 ? `color-mix(in srgb, ${inkColor} ${Math.round(progress * 100)}%, ${accentColor})` : accentColor;
       } else {
-        nextGongDisplay.style.color = 'var(--muted)';
+        displayColor = 'var(--muted)';
       }
-      nextGongDisplay.style.display = 'block';
     } else {
-      nextGongDisplay.style.display = 'none';
+      // Session complete
+      displayHTML = `<div class="next-gong-text">session complete</div><div class="tap-note">tap the center to start again</div>`;
+      displayColor = 'var(--muted)';
     }
+    if (displayHTML !== lastDisplayHTML) { nextGongDisplay.innerHTML = displayHTML; lastDisplayHTML = displayHTML; }
+    if (displayColor !== lastDisplayColor) { nextGongDisplay.style.color = displayColor; lastDisplayColor = displayColor; }
+    nextGongDisplay.style.display = 'block';
 
     // Center play/pause area (inner glass)
     ctx.beginPath();
     ctx.arc(cx, cy, radius * 0.6, 0, TAU);
     const innerGrad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 0.6);
-    const bg2Color = getComputedStyle(document.documentElement).getPropertyValue('--bg2').trim();
+    const bg2Color = cssVar('--bg2');
     const bg2Rgb = bg2Color.startsWith('#') ? hexToRgb(bg2Color) : bg2Color;
 
     if (isPlaying) {
@@ -1392,7 +1735,7 @@
   }
     ctx.fillStyle = innerGrad;
     ctx.fill();
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-border').trim();
+    ctx.strokeStyle = cssVar('--canvas-border');
     ctx.lineWidth = 2*DPR;
     ctx.stroke();
 
@@ -1436,7 +1779,7 @@
       }
 
       ctx.closePath();
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+      ctx.fillStyle = cssVar('--accent');
       ctx.globalAlpha = 0.2;
       ctx.fill();
 
@@ -1448,7 +1791,7 @@
     const iconY = cy; // Centered in dial
     ctx.save();
     ctx.globalAlpha = 0.15; // Transparent
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    ctx.fillStyle = cssVar('--accent');
     if (isPlaying) {
       ctx.fillRect(cx - iconSize*0.7, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
       ctx.fillRect(cx + iconSize*0.2, iconY - iconSize*0.8, iconSize*0.5, iconSize*1.6);
@@ -1465,15 +1808,15 @@
     // Center text
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim();
-    const timeScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-time-scale').trim());
+    ctx.fillStyle = cssVar('--ink');
+    const timeScale = parseFloat(cssVar('--canvas-time-scale'));
     ctx.font = `bold ${Math.floor(w * timeScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.save();
     ctx.globalAlpha = isPlaying ? 1 : 0.6;
     ctx.fillText(fmt(cur), cx, cy - w*0.01);
     ctx.restore();
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle').trim();
-    const subtitleScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--canvas-subtitle-scale').trim());
+    ctx.fillStyle = cssVar('--canvas-subtitle');
+    const subtitleScale = parseFloat(cssVar('--canvas-subtitle-scale'));
     ctx.font = `${Math.floor(w * subtitleScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
     ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.065);
   }
@@ -1498,11 +1841,31 @@
   document.documentElement.setAttribute('data-theme', 'dark');
   document.documentElement.classList.add('paused');
 
-  // Initialize hue shift
+  // Initialize hue shift, then enable a slow transition so a mid-session
+  // 9pm/5am boundary drifts over a minute instead of snapping
   updateHueShift();
+  requestAnimationFrame(() => { document.documentElement.style.transition = 'filter 60s linear'; });
 
   // Update hue shift every minute
   setInterval(updateHueShift, 60000);
+
+  // Offer to resume a recently interrupted session
+  const savedSession = readSavedSession();
+  if (savedSession) {
+    btnResume.hidden = false;
+    btnResume.innerHTML = `resume previous session<br><small style="font-weight:400;color:var(--muted)">at ${fmt(savedSession.t)}</small>`;
+  }
+
+  // Don't lose a running session to an accidental refresh / back-swipe
+  window.addEventListener('beforeunload', (e) => {
+    if (isPlaying) { e.preventDefault(); e.returnValue = ''; }
+  });
+  window.addEventListener('pagehide', () => { saveSession(); });
+
+  // Offline support (no-op on file:// or unsupported browsers)
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
 
   updateButtonStates();
   resizeCanvas();
