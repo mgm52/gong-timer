@@ -234,8 +234,7 @@
   .stats > div { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: center; padding: 4px; }
   .stats > div + div { border-left: 1px solid rgba(255,255,255,0.08); }
   .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); }
-  .val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; transition: color .3s ease; }
-  .val.dim { color: var(--muted); }
+  .val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
   .status-line {
     min-height: 20px;
     font-size: var(--font-md);
@@ -532,7 +531,7 @@
       <div class="readouts">
         <div class="stats">
           <div><span class="lbl">remaining</span><span id="remainingVal" class="val">37:38</span></div>
-          <div><span class="lbl">ends at</span><span id="endsAtVal" class="val dim">--:--</span></div>
+          <div><span class="lbl">ends at</span><span id="endsAtVal" class="val">--:--</span></div>
         </div>
         <div id="statusLine" class="status-line" role="status"></div>
         <div class="controls">
@@ -753,7 +752,7 @@
   let clockFormatter = null;
   function fmtClock(date) {
     try {
-      if (!clockFormatter) clockFormatter = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' });
+      if (!clockFormatter) clockFormatter = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' });
       return clockFormatter.format(date);
     } catch (e) {
       return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
@@ -1344,11 +1343,10 @@
 
     cycleTag.textContent = done ? 'complete' : `cycle ${currentCycle()} of 8`;
     remainingVal.textContent = fmt(remainingSecs);
-    // While paused this is a projection ("if you resumed now"), shown dimmed
-    // and refreshed by the minute timer below
+    // While paused this is a projection ("if you resumed now"), refreshed by
+    // the timer below
     // Once finished there is no end time to project, so show a placeholder
     endsAtVal.textContent = done ? '--:--' : fmtClock(new Date(Date.now() + remainingSecs * 1000));
-    endsAtVal.classList.toggle('dim', !isPlaying);
 
     let status = '';
     if (done) status = 'finished · tap the centre to restart';
