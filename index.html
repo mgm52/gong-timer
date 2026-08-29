@@ -29,7 +29,6 @@
     --canvas-label-scale: 0.03;      /* rotating labels inside dial */
     --canvas-caption-scale: 0.028;   /* "elapsed" caption above the time */
     --canvas-time-scale: 0.115;      /* center time display */
-    --canvas-subtitle-scale: 0.036;  /* "next gong in M:SS" beneath it */
 
     /* Colors */
     --bg: #0b0e14;        /* deeper background */
@@ -508,7 +507,7 @@
       <li>Tap the center of the dial to pause / play</li>
       <li>Drag around the dial ring to change the current time</li>
       <li>The buttons under the dial skip &plusmn;30s, jump to the &frac14; &frac12; &frac34; points, or skip to just before the next gong (&#8677;)</li>
-      <li>The dial shows time elapsed and the countdown to the next gong; below it, time remaining and the clock time the dyad will end</li>
+      <li>The dial shows time elapsed (the inner ring fills across the current cycle); below it, time remaining and the clock time the dyad will end</li>
     </ul>
     <h3>Tips</h3>
     <ul>
@@ -743,25 +742,12 @@
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgb(${r}, ${g}, ${b})`;
   }
-  // Linear blend of two #rrggbb colours, k = 0 → a, k = 1 → b
-  function mixHex(a, b, k) {
-    const ch = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
-    const r = Math.round(ch(a, 1) + (ch(b, 1) - ch(a, 1)) * k);
-    const g = Math.round(ch(a, 3) + (ch(b, 3) - ch(a, 3)) * k);
-    const bl = Math.round(ch(a, 5) + (ch(b, 5) - ch(a, 5)) * k);
-    return `rgb(${r}, ${g}, ${bl})`;
-  }
   function syncDisplayToCurrent() { displayTime = currentTime; }
   function fmt(secs) {
     secs = Math.max(0, Math.floor(secs || 0));
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  }
-  // Short countdown form: 3:46 rather than 03:46 (already-rounded whole seconds)
-  function fmtShort(secs) {
-    secs = Math.max(0, secs);
-    return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2,'0')}`;
   }
   // Wall-clock time in the user's locale (e.g. "12:14" or "12:14 PM")
   let clockFormatter = null;
@@ -1851,7 +1837,7 @@
     }
     ctx.restore();
 
-    // Center text: "elapsed" caption, the elapsed time, and the next-gong countdown
+    // Center text: "elapsed" caption above the elapsed time
     const fontStack = 'system-ui, -apple-system, Segoe UI, Roboto, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1860,32 +1846,15 @@
     ctx.fillStyle = cssVar('--muted');
     ctx.font = `700 ${Math.floor(w * parseFloat(cssVar('--canvas-caption-scale')))}px ${fontStack}`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${DPR}px`;
-    ctx.fillText('elapsed', cx, cy - w*0.085);
+    ctx.fillText('elapsed', cx, cy - w*0.06);
     ctx.restore();
 
     ctx.save();
     ctx.fillStyle = cssVar('--ink');
     ctx.globalAlpha = isPlaying ? 1 : 0.6;
     ctx.font = `bold ${Math.floor(w * parseFloat(cssVar('--canvas-time-scale')))}px ${fontStack}`;
-    ctx.fillText(fmt(cur), cx, cy - w*0.005);
+    ctx.fillText(fmt(cur), cx, cy + w*0.02);
     ctx.restore();
-
-    const nextGongTime = gongTimes.find(t => t > currentTime);
-    let countdownText, countdownColor;
-    if (nextGongTime) {
-      const secsToGong = Math.max(0, Math.ceil(nextGongTime - currentTime));
-      countdownText = `next gong in ${fmtShort(secsToGong)}`;
-      // Accent that turns to ink over the final minute (quantized to whole seconds)
-      countdownColor = !isPlaying ? cssVar('--muted')
-        : secsToGong > 60 ? cssVar('--accent')
-        : mixHex(cssVar('--accent'), cssVar('--ink'), (60 - secsToGong) / 60);
-    } else {
-      countdownText = 'session complete';
-      countdownColor = cssVar('--muted');
-    }
-    ctx.fillStyle = countdownColor;
-    ctx.font = `700 ${Math.floor(w * parseFloat(cssVar('--canvas-subtitle-scale')))}px ${fontStack}`;
-    ctx.fillText(countdownText, cx, cy + w*0.085);
   }
 
   // Time-based hue shift (9pm to 5am)
