@@ -251,25 +251,22 @@
     gap: 4px;
     padding: 0 0 2px;
   }
-  .controls button {
+  /* Plain text buttons, as in the original design: -30s  •  ••  •••  >>  +30s */
+  .controls button,
+  .controls button:hover {
     flex: 1 1 0;
     min-width: 0;
     min-height: 44px;
     padding: 8px 2px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
     line-height: 1;
-    font-size: 16px;
-    font-weight: 700;
+    font-size: var(--font-lg);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 12px;
+    background: none;
+    border: none;
+    box-shadow: none;
   }
-  .controls button small { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: .3px; }
+  .controls button.dots { font-size: 28px; }
 
   /* Button click animation */
   .button-click-animation {
@@ -505,8 +502,8 @@
     <ul>
       <li>Tap the center of the dial to pause / play</li>
       <li>Drag around the dial ring to change the current time</li>
-      <li>The buttons under the dial skip &plusmn;30s, jump to the &frac14; &frac12; &frac34; points, or skip to just before the next gong (&#8677;)</li>
-      <li>The dial shows time elapsed (the inner ring fills across the current cycle); below it, time remaining and the clock time the dyad will end</li>
+      <li>The bottom buttons skip &plusmn;30s, jump to the quarter points (&bull; &bull;&bull; &bull;&bull;&bull;), or skip to just before the next gong (&gt;&gt;)</li>
+      <li>The dial shows time elapsed; below it, time remaining and the clock time the dyad will end</li>
     </ul>
     <h3>Tips</h3>
     <ul>
@@ -535,12 +532,12 @@
         </div>
         <div id="statusLine" class="status-line" role="status"></div>
         <div class="controls">
-          <button id="rew" aria-label="Back 30 seconds" title="Back 30 seconds">&minus;30s<small>back</small></button>
-          <button id="quarterGong" aria-label="Jump to quarter point (09:28)" title="Jump to quarter point (09:28)">&frac14;<small>9:28</small></button>
-          <button id="halfGong" aria-label="Jump to halfway point (18:53)" title="Jump to halfway point (18:53)">&frac12;<small>18:53</small></button>
-          <button id="threeQuarterGong" aria-label="Jump to three-quarter point (28:17)" title="Jump to three-quarter point (28:17)">&frac34;<small>28:17</small></button>
-          <button id="fastForward" aria-label="Skip to just before the next gong" title="Skip to just before the next gong">&#8677;<small>next gong</small></button>
-          <button id="ff" aria-label="Forward 30 seconds" title="Forward 30 seconds">+30s<small>skip</small></button>
+          <button id="rew" aria-label="Back 30 seconds" title="Back 30 seconds">-30s</button>
+          <button id="threeQuarterGong" class="dots" aria-label="Jump to three-quarter point (28:17)" title="Jump to three-quarter point (28:17)">•</button>
+          <button id="halfGong" class="dots" aria-label="Jump to halfway point (18:53)" title="Jump to halfway point (18:53)">••</button>
+          <button id="quarterGong" class="dots" aria-label="Jump to quarter point (09:28)" title="Jump to quarter point (09:28)">•••</button>
+          <button id="fastForward" class="dots" aria-label="Skip to just before the next gong" title="Skip to just before the next gong">&gt;&gt;</button>
+          <button id="ff" aria-label="Forward 30 seconds" title="Forward 30 seconds">+30s</button>
         </div>
       </div>
     </div>
@@ -1441,6 +1438,22 @@
       ctx.stroke();
     });
 
+    // Dots outside the ring at the jump points: ••• quarter, •• half, • three-quarter
+    // (matching the button labels)
+    const dotDistance = radius + ring;
+    const dotRadius = 4*DPR;
+    const dotSpacing = 8*DPR;
+    ctx.fillStyle = cssVar('--canvas-marker');
+    [[1, 3], [3, 2], [5, 1]].forEach(([gi, count]) => {
+      const a = START_ANGLE + gongTimes[gi] / Math.max(totalDuration, 0.001) * TAU;
+      const px = dotDistance*Math.cos(a), py = dotDistance*Math.sin(a);
+      for (let d = 0; d < count; d++) {
+        ctx.beginPath();
+        ctx.arc(px + (d - (count - 1) / 2) * dotSpacing, py, dotRadius, 0, TAU);
+        ctx.fill();
+      }
+    });
+
     // Completed segments light fill (inner area) - static positions
     const completedSegmentFill = 'rgba(110,231,255,0.25)';
     const innerRadius = radius; // Inner area where segment numbers are
@@ -1502,26 +1515,6 @@
         ctx.fill();
         break; // Only one current segment
       }
-    }
-
-    // Inner ring: progress through the current cycle (outer ring = whole session)
-    if (cur < totalDuration && radius - ring * 3.2 > 0) {
-      let cStart = 0, cEnd = gongTimes[0];
-      for (let i = 0; i < gongTimes.length; i++) {
-        if (cur >= gongTimes[i]) { cStart = gongTimes[i]; cEnd = i + 1 < gongTimes.length ? gongTimes[i + 1] : totalDuration; }
-      }
-      const cycleFrac = Math.min(1, Math.max(0, (cur - cStart) / Math.max(cEnd - cStart, 0.001)));
-      const r2 = radius - ring * 3.2;
-      ctx.lineWidth = ring * 0.45;
-      ctx.lineCap = 'butt';
-      ctx.beginPath();
-      ctx.arc(0, 0, r2, 0, TAU);
-      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(0, 0, r2, START_ANGLE, START_ANGLE + cycleFrac * TAU);
-      ctx.strokeStyle = isPlaying ? 'rgba(233,238,247,0.85)' : 'rgba(148,163,184,0.55)';
-      ctx.stroke();
     }
 
     // Static labels (inside dial)
