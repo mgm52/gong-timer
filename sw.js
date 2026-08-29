@@ -1,7 +1,7 @@
 // Offline support for the Dyad Gong Timer.
 // Strategy: network-first for the page itself (so updates propagate),
 // cache-first for the immutable assets (audio, icons).
-const CACHE = 'gong-timer-v1';
+const CACHE = 'gong-timer-v2';
 const ASSETS = [
   './',
   './index.html',
