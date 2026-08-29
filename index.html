@@ -26,9 +26,10 @@
     --font-3xl: 55px;     /* time text */
 
     /* Canvas font scale factors (multiplied by canvas width) */
-    --canvas-label-scale: 0.03;     /* rotating labels inside dial */
-    --canvas-time-scale: 0.11;     /* center time display */
-    --canvas-subtitle-scale: 0.05; /* "of XX:XX" subtitle */
+    --canvas-label-scale: 0.03;      /* rotating labels inside dial */
+    --canvas-caption-scale: 0.028;   /* "elapsed" caption above the time */
+    --canvas-time-scale: 0.115;      /* center time display */
+    --canvas-subtitle-scale: 0.036;  /* "next gong in M:SS" beneath it */
 
     /* Colors */
     --bg: #0b0e14;        /* deeper background */
@@ -155,7 +156,6 @@
       font-size: var(--font-md);
       min-height: 44px; /* iOS touch target minimum */
     }
-    .corner-btn { min-width: 44px; }
   }
   .btn-accent { color: var(--bg3); background: linear-gradient(180deg, rgba(110,231,255,.95), rgba(68,159,239,.9)); border-color: rgba(110,231,255,.85); box-shadow: 0 6px 24px rgba(110,231,255,.3); }
   .btn-accent:hover { filter: saturate(115%); }
@@ -163,102 +163,115 @@
   .btn-disabled:hover { border-color: rgba(255,255,255,0.14); box-shadow: none; }
 
 
-  /* Canvas Stage */
+  /* Canvas Stage
+     Portrait: cycle tag / dial / readouts stacked; the dial takes whatever
+     height is left and is kept square by JS (see fitDial). Short screens
+     switch to dial-left, readouts-right. */
   .canvas-panel {
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    gap: 8px;
     position: relative;
     overflow: hidden;
   }
-  .next-gong-top {
-    position: absolute;
-    top: 2%;
-    left: 50%;
-    transform: translateX(-50%);
-    color: var(--accent2);
-    font-size: var(--font-2xl);
-    font-weight: 800;
-    text-align: center;
-    z-index: 2;
-    width: max-content;
-    font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 0 rgba(0,0,0,.4);
-    transition: color .3s ease, transform .4s cubic-bezier(.2,.8,.2,1);
-  }
-  .next-gong-top.pulse { transform: translateX(-50%) scale(1.02); }
-  .next-gong-text { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 10px; }
-  .paused-note { font-size: var(--font-3xl); font-weight: 800; color: var(--muted); margin-top: -20px; }
-  .tap-note { font-size: var(--font-xl); font-weight: 600; color: var(--muted); margin-top: 0px; }
-  .time-text { font-size: var(--font-3xl); font-weight: 800; margin-top: -10px; display: block; }
-
-  .corner-btn {
-    position: absolute;
-    bottom: max(20px, calc(20px + env(safe-area-inset-bottom)));
-    z-index: 3;
-    font-size: var(--font-lg);
-    width: 90px;
-    height: 90px;
-    display: flex;
-    align-items: end;
-    justify-content: center;
-    background: none;
-    border: none;
-    box-shadow: none;
-  }
-  .corner-btn:hover {
-    background: none;
-    border: none;
-    box-shadow: none;
-  }
-  .corner-btn-pos1 {
-    left: 8.33%;
-    transform: translateX(-50%);
-  }
-  .corner-btn-pos2 {
-    left: 25%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-pos3 {
-    left: 41.67%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-pos4 {
-    left: 58.33%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-pos5 {
-    left: 75%;
-    transform: translateX(-50%);
-    font-size: 28px;
-    line-height: 1;
-  }
-  .corner-btn-pos6 {
-    left: 91.67%;
-    transform: translateX(-50%);
-  }
-
-  canvas {
+  .side { display: contents; }
+  .cycle-tag-row {
+    order: -1;
     width: 100%;
-    height: 100%;
-    max-width: min(100%, max(220px, 100dvh - 300px));
-    max-height: min(100%, max(220px, 100dvh - 300px));
+    min-height: 32px;
+    padding: 2px 40px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .cycle-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    padding: 4px 12px;
+    white-space: nowrap;
+    transition: transform .4s cubic-bezier(.2,.8,.2,1);
+  }
+  .cycle-tag.pulse { transform: scale(1.08); }
+
+  .dial-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    /* Once the dial is width-limited, stop growing so spare height becomes
+       breathing room around it rather than dead space inside the wrapper
+       (58px = .wrap + .panel horizontal padding and borders) */
+    max-height: calc(min(100vw, 980px) - 58px);
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas {
     display: block;
+    width: 220px;   /* overwritten by fitDial() */
+    height: 220px;
     touch-action: none;
     cursor: pointer;
-    object-fit: contain;
     filter: drop-shadow(0 40px 80px rgba(0,0,0,.35));
-    margin-top: 50px;
   }
+
+  .readouts {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .stats { display: flex; justify-content: center; width: 100%; }
+  .stats > div { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: center; padding: 4px; }
+  .stats > div + div { border-left: 1px solid rgba(255,255,255,0.08); }
+  .lbl { font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); }
+  .val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; transition: color .3s ease; }
+  .val.dim { color: var(--muted); }
+  .status-line {
+    min-height: 20px;
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .controls {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 0 0 2px;
+  }
+  .controls button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 2px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    line-height: 1;
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+  }
+  .controls button small { font-size: 10px; font-weight: 600; color: var(--muted); letter-spacing: .3px; }
 
   /* Button click animation */
   .button-click-animation {
@@ -320,13 +333,16 @@
     .panel { padding: 10px; }
     button { padding: 8px 12px; font-size: var(--font-xs); }
   }
-  /* Short screens (landscape phones): reclaim vertical space for the dial */
+  /* Short screens (landscape phones): dial on the left, readouts on the right */
   @media (max-height: 520px) {
     .wrap { padding: 8px; gap: 6px; }
-    canvas { margin-top: 8px; max-width: min(100%, max(180px, 100dvh - 120px)); max-height: min(100%, max(180px, 100dvh - 120px)); }
     .footer-note { display: none; }
-    .next-gong-top { font-size: var(--font-xl); }
-    .paused-note, .time-text { font-size: var(--font-2xl); }
+    .canvas-panel { flex-direction: row; gap: 12px; }
+    .dial-wrap { flex: 0 0 auto; width: auto; height: 100%; max-height: none; aspect-ratio: 1 / 1; }
+    .side { display: flex; flex-direction: column; flex: 1 1 0; min-width: 0; height: 100%; justify-content: center; gap: 10px; }
+    .cycle-tag-row { order: 0; min-height: 0; padding: 0; }
+    .status-line { min-height: 0; }
+    .controls { gap: 3px; }
   }
 
   /* Help button */
@@ -335,11 +351,11 @@
     top: 10px;
     right: 10px;
     z-index: 3;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border-radius: 50%;
-    font-size: var(--font-lg);
+    font-size: var(--font-md);
     color: var(--muted);
     background: none;
     border: 1px solid rgba(255,255,255,0.12);
@@ -491,7 +507,8 @@
     <ul>
       <li>Tap the center of the dial to pause / play</li>
       <li>Drag around the dial ring to change the current time</li>
-      <li>The bottom buttons skip &plusmn;30s, jump to the quarter points (&bull; &bull;&bull; &bull;&bull;&bull;), or skip to just before the next gong (&gt;&gt;)</li>
+      <li>The buttons under the dial skip &plusmn;30s, jump to the &frac14; &frac12; &frac34; points, or skip to just before the next gong (&#8677;)</li>
+      <li>The dial shows time elapsed and the countdown to the next gong; below it, time remaining and the clock time the dyad will end</li>
     </ul>
     <h3>Tips</h3>
     <ul>
@@ -507,15 +524,28 @@
 <div class="wrap" style="display: none;">
 
   <div class="panel canvas-panel">
-    <div id="nextGongDisplay" class="next-gong-top"></div>
     <button id="helpBtn" class="help-btn" aria-label="Show instructions" title="Instructions">?</button>
-    <button id="rew" class="corner-btn corner-btn-pos1" aria-label="Back 30 seconds" title="Back 30 seconds">-30s</button>
-    <button id="threeQuarterGong" class="corner-btn corner-btn-pos2" aria-label="Jump to three-quarter point (28:17)" title="Jump to three-quarter point (28:17)">•</button>
-    <button id="halfGong" class="corner-btn corner-btn-pos3" aria-label="Jump to halfway point (18:53)" title="Jump to halfway point (18:53)">••</button>
-    <button id="quarterGong" class="corner-btn corner-btn-pos4" aria-label="Jump to quarter point (09:28)" title="Jump to quarter point (09:28)">•••</button>
-    <button id="fastForward" class="corner-btn corner-btn-pos5" aria-label="Skip to just before the next gong" title="Skip to just before the next gong">&gt;&gt;</button>
-    <button id="ff" class="corner-btn corner-btn-pos6" aria-label="Forward 30 seconds" title="Forward 30 seconds">+30s</button>
-    <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
+    <div class="dial-wrap">
+      <canvas id="dial" width="640" height="640" aria-label="Radial audio scrubber"></canvas>
+    </div>
+    <div class="side">
+      <div class="cycle-tag-row"><span id="cycleTag" class="cycle-tag" aria-live="polite">cycle 1 of 8</span></div>
+      <div class="readouts">
+        <div class="stats">
+          <div><span class="lbl">remaining</span><span id="remainingVal" class="val">37:38</span></div>
+          <div><span class="lbl">ends at</span><span id="endsAtVal" class="val dim">--:--</span></div>
+        </div>
+        <div id="statusLine" class="status-line" role="status"></div>
+        <div class="controls">
+          <button id="rew" aria-label="Back 30 seconds" title="Back 30 seconds">&minus;30s<small>back</small></button>
+          <button id="quarterGong" aria-label="Jump to quarter point (09:28)" title="Jump to quarter point (09:28)">&frac14;<small>9:28</small></button>
+          <button id="halfGong" aria-label="Jump to halfway point (18:53)" title="Jump to halfway point (18:53)">&frac12;<small>18:53</small></button>
+          <button id="threeQuarterGong" aria-label="Jump to three-quarter point (28:17)" title="Jump to three-quarter point (28:17)">&frac34;<small>28:17</small></button>
+          <button id="fastForward" aria-label="Skip to just before the next gong" title="Skip to just before the next gong">&#8677;<small>next gong</small></button>
+          <button id="ff" aria-label="Forward 30 seconds" title="Forward 30 seconds">+30s<small>skip</small></button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="footer-note" style="text-align: center; color: var(--ink); opacity: 0.6; font-size: var(--font-xs); font-weight: 350; letter-spacing: 1px;">
@@ -637,8 +667,12 @@
   const halfGongBtn = document.getElementById('halfGong');
   const threeQuarterGongBtn = document.getElementById('threeQuarterGong');
   const dial = document.getElementById('dial');
+  const dialWrap = dial.parentElement;
   const ctx = dial.getContext('2d');
-  const nextGongDisplay = document.getElementById('nextGongDisplay');
+  const cycleTag = document.getElementById('cycleTag');
+  const remainingVal = document.getElementById('remainingVal');
+  const endsAtVal = document.getElementById('endsAtVal');
+  const statusLine = document.getElementById('statusLine');
 
   // State
   let isPlaying = false;
@@ -654,8 +688,7 @@
   let gongTimeouts = [];
   let lastAngle = 0;
   let wakeLock = null;
-  let lastDisplayHTML = null;
-  let lastDisplayColor = null;
+  let lastReadoutKey = null;   // dedupes DOM writes for the readouts around the dial
   let lastDrawTime = 0;
 
   // Cursor ring animation state
@@ -710,12 +743,35 @@
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgb(${r}, ${g}, ${b})`;
   }
+  // Linear blend of two #rrggbb colours, k = 0 → a, k = 1 → b
+  function mixHex(a, b, k) {
+    const ch = (hex, i) => parseInt(hex.slice(i, i + 2), 16);
+    const r = Math.round(ch(a, 1) + (ch(b, 1) - ch(a, 1)) * k);
+    const g = Math.round(ch(a, 3) + (ch(b, 3) - ch(a, 3)) * k);
+    const bl = Math.round(ch(a, 5) + (ch(b, 5) - ch(a, 5)) * k);
+    return `rgb(${r}, ${g}, ${bl})`;
+  }
   function syncDisplayToCurrent() { displayTime = currentTime; }
   function fmt(secs) {
     secs = Math.max(0, Math.floor(secs || 0));
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  // Short countdown form: 3:46 rather than 03:46 (already-rounded whole seconds)
+  function fmtShort(secs) {
+    secs = Math.max(0, secs);
+    return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2,'0')}`;
+  }
+  // Wall-clock time in the user's locale (e.g. "12:14" or "12:14 PM")
+  let clockFormatter = null;
+  function fmtClock(date) {
+    try {
+      if (!clockFormatter) clockFormatter = new Intl.DateTimeFormat([], { hour: '2-digit', minute: '2-digit' });
+      return clockFormatter.format(date);
+    } catch (e) {
+      return `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+    }
   }
 
   const TAU = Math.PI * 2;
@@ -907,9 +963,9 @@
     gongTimeouts.forEach(timeout => clearTimeout(timeout));
     gongTimeouts = [];
 
-    // Header nudge
-    nextGongDisplay.classList.add('pulse');
-    setTimeout(() => nextGongDisplay.classList.remove('pulse'), 280);
+    // Cycle tag nudge
+    cycleTag.classList.add('pulse');
+    setTimeout(() => cycleTag.classList.remove('pulse'), 280);
 
     if (isLastGong) {
       addGongPulse();
@@ -1105,14 +1161,22 @@
     }
   });
 
-  // Canvas sizing
+  // Canvas sizing: the dial is the largest square that fits its wrapper
+  // (CSS alone can't size a square to "whatever height is left" reliably)
+  function fitDial() {
+    const rect = dialWrap.getBoundingClientRect();
+    const size = Math.max(120, Math.floor(Math.min(rect.width, rect.height)));
+    const px = size + 'px';
+    if (dial.style.width !== px) { dial.style.width = px; dial.style.height = px; }
+  }
   function resizeCanvas() {
     DPR = Math.max(1, window.devicePixelRatio || 1);
     const rect = dial.getBoundingClientRect();
-    dial.width  = rect.width  * DPR;
-    dial.height = rect.height * DPR;
+    dial.width  = Math.round(rect.width  * DPR);
+    dial.height = Math.round(rect.height * DPR);
     draw();
   }
+  new ResizeObserver(fitDial).observe(dialWrap);
   new ResizeObserver(resizeCanvas).observe(dial);
 
   // Input Handlers
@@ -1246,11 +1310,7 @@
   function createButtonClickAnimation(element) {
     const rect = element.getBoundingClientRect();
     const x = rect.left + rect.width / 2;
-
-    // For corner buttons, position animation at the bottom of the button (where the text appears)
-    // instead of the geometric center
-    const isCornerBtn = element.classList.contains('corner-btn');
-    const y = isCornerBtn ? rect.bottom - 20 : rect.top + rect.height / 2;
+    const y = rect.top + rect.height / 2;
 
     // Create animation element
     const animationEl = document.createElement('div');
@@ -1281,6 +1341,36 @@
     });
   });
 
+  // Readouts around the dial: cycle tag, remaining, wall-clock end time and
+  // the status line. Recomputed at most once per second of session time
+  // (or on a state change) so the DOM isn't touched every frame.
+  function currentCycle() {
+    let passed = 0;
+    for (const t of gongTimes) if (t <= currentTime) passed++;
+    return Math.min(8, passed + 1);
+  }
+  function updateReadouts(force = false) {
+    const done = currentTime >= totalDuration;
+    const remainingSecs = Math.max(0, Math.ceil(totalDuration - currentTime));
+    const key = `${remainingSecs}|${isPlaying}|${done}|${currentTime === 0}`;
+    if (!force && key === lastReadoutKey) return;
+    lastReadoutKey = key;
+
+    cycleTag.textContent = done ? 'complete' : `cycle ${currentCycle()} of 8`;
+    remainingVal.textContent = fmt(remainingSecs);
+    // While paused this is a projection ("if you resumed now"), shown dimmed
+    // and refreshed by the minute timer below
+    // Once finished there is no end time to project, so show a placeholder
+    endsAtVal.textContent = done ? '--:--' : fmtClock(new Date(Date.now() + remainingSecs * 1000));
+    endsAtVal.classList.toggle('dim', !isPlaying);
+
+    let status = '';
+    if (done) status = 'finished · tap the centre to restart';
+    else if (!isPlaying) status = currentTime === 0 ? 'tap the centre to start' : 'paused · tap the centre to resume';
+    statusLine.textContent = status;
+  }
+  setInterval(() => { if (!isPlaying) updateReadouts(true); }, 30000);
+
   // Drawing
   function updateButtonStates() {
     if (currentTime === 0) {
@@ -1294,6 +1384,7 @@
 
   function draw() {
     const w = dial.width, h = dial.height;
+    if (w === 0 || h === 0) return; // hidden behind the title screen; resize redraws
     ctx.clearRect(0,0,w,h);
     const cx = w/2, cy = h/2;
     const radius = Math.min(w,h) * 0.38;
@@ -1364,43 +1455,6 @@
       ctx.lineWidth = lineWidth;
       ctx.strokeStyle = cssVar('--canvas-marker');
       ctx.stroke();
-
-      // Add dots above markers
-      const dotDistance = radius + ring; // Outside the dial ring
-      const dotRadius = 4*DPR;
-      const dotSpacing = 8*DPR;
-
-      if (index === 1) { // Quarter mark - 3 dots
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a) - dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a) + dotSpacing, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-      } else if (index === 3) { // Half mark - 2 dots
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a) - dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a) + dotSpacing/2, dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-      } else if (index === 5) { // Three-quarter mark - 1 dot
-        ctx.beginPath();
-        ctx.arc(dotDistance*Math.cos(a), dotDistance*Math.sin(a), dotRadius, 0, TAU);
-        ctx.fillStyle = cssVar('--canvas-marker');
-        ctx.fill();
-      }
     });
 
     // Completed segments light fill (inner area) - static positions
@@ -1464,6 +1518,26 @@
         ctx.fill();
         break; // Only one current segment
       }
+    }
+
+    // Inner ring: progress through the current cycle (outer ring = whole session)
+    if (cur < totalDuration && radius - ring * 3.2 > 0) {
+      let cStart = 0, cEnd = gongTimes[0];
+      for (let i = 0; i < gongTimes.length; i++) {
+        if (cur >= gongTimes[i]) { cStart = gongTimes[i]; cEnd = i + 1 < gongTimes.length ? gongTimes[i + 1] : totalDuration; }
+      }
+      const cycleFrac = Math.min(1, Math.max(0, (cur - cStart) / Math.max(cEnd - cStart, 0.001)));
+      const r2 = radius - ring * 3.2;
+      ctx.lineWidth = ring * 0.45;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      ctx.arc(0, 0, r2, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, r2, START_ANGLE, START_ANGLE + cycleFrac * TAU);
+      ctx.strokeStyle = isPlaying ? 'rgba(233,238,247,0.85)' : 'rgba(148,163,184,0.55)';
+      ctx.stroke();
     }
 
     // Static labels (inside dial)
@@ -1686,42 +1760,14 @@
     ctx.stroke();
     ctx.restore();
 
-    // Next gong display (DOM only touched when the rendered state changes)
-    const nextGongTime = gongTimes.find(t => t > currentTime);
-    let displayHTML, displayColor;
-    if (nextGongTime) {
-      const remaining = nextGongTime - currentTime;
-      const remainingSecs = Math.max(0, Math.ceil(remaining));
-      const m = Math.floor(remainingSecs / 60);
-      const s = remainingSecs % 60;
-      const timeText = m > 0 ? `${m}m ${s}s` : `${s}s`;
-      const text = `<div class="next-gong-text">next gong in</div> <span class="time-text">${timeText}</span>`;
-      const pausedNote = !isPlaying ?
-        (currentTime === 0 ? `<div class="tap-note">tap ▸ to start</div>` : `<div class="paused-note">paused</div>`) : '';
-      displayHTML = text + pausedNote;
-      if (isPlaying) {
-        // Gradually transition from accent to ink color as time gets closer
-        // (quantized to whole seconds so the style only changes once per second)
-        const progress = Math.max(0, Math.min(1, (60 - remainingSecs) / 60));
-        const accentColor = cssVar('--accent');
-        const inkColor = cssVar('--ink');
-        displayColor = remainingSecs <= 60 ? `color-mix(in srgb, ${inkColor} ${Math.round(progress * 100)}%, ${accentColor})` : accentColor;
-      } else {
-        displayColor = 'var(--muted)';
-      }
-    } else {
-      // Session complete
-      displayHTML = `<div class="next-gong-text">session complete</div><div class="tap-note">tap the center to start again</div>`;
-      displayColor = 'var(--muted)';
-    }
-    if (displayHTML !== lastDisplayHTML) { nextGongDisplay.innerHTML = displayHTML; lastDisplayHTML = displayHTML; }
-    if (displayColor !== lastDisplayColor) { nextGongDisplay.style.color = displayColor; lastDisplayColor = displayColor; }
-    nextGongDisplay.style.display = 'block';
+    // DOM readouts around the dial (deduped inside)
+    updateReadouts();
 
     // Center play/pause area (inner glass)
+    const glassR = radius * 0.5;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 0.6, 0, TAU);
-    const innerGrad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, radius * 0.6);
+    ctx.arc(cx, cy, glassR, 0, TAU);
+    const innerGrad = ctx.createRadialGradient(cx, cy, radius * 0.1, cx, cy, glassR);
     const bg2Color = cssVar('--bg2');
     const bg2Rgb = bg2Color.startsWith('#') ? hexToRgb(bg2Color) : bg2Color;
 
@@ -1741,7 +1787,7 @@
 
     // Subtle rotating wave around inner glass (when playing and not dragging)
     if (isPlaying && !dragging) {
-      const waveRadius = radius * 0.55;
+      const waveRadius = glassR * 0.917;
       const waveTime = performance.now() * 0.001; // Convert to seconds
       const rotationSpeed = 0.8; // Rotation speed (radians per second) - negative for counter-clockwise, faster
 
@@ -1752,7 +1798,7 @@
       const wavePoints = 120; // Number of points for smooth wave
       const waveAmplitude = 3 * DPR; // Wave height
       const waveFrequency = 8; // Number of waves around the circle
-      const outerRadius = radius * 0.58; // Outer boundary of the wave band
+      const outerRadius = glassR * 0.967; // Outer boundary of the wave band
 
       // Create the wave path (inner edge)
       ctx.beginPath();
@@ -1805,20 +1851,41 @@
     }
     ctx.restore();
 
-    // Center text
+    // Center text: "elapsed" caption, the elapsed time, and the next-gong countdown
+    const fontStack = 'system-ui, -apple-system, Segoe UI, Roboto, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = cssVar('--ink');
-    const timeScale = parseFloat(cssVar('--canvas-time-scale'));
-    ctx.font = `bold ${Math.floor(w * timeScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
+
     ctx.save();
-    ctx.globalAlpha = isPlaying ? 1 : 0.6;
-    ctx.fillText(fmt(cur), cx, cy - w*0.01);
+    ctx.fillStyle = cssVar('--muted');
+    ctx.font = `700 ${Math.floor(w * parseFloat(cssVar('--canvas-caption-scale')))}px ${fontStack}`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${DPR}px`;
+    ctx.fillText('elapsed', cx, cy - w*0.085);
     ctx.restore();
-    ctx.fillStyle = cssVar('--canvas-subtitle');
-    const subtitleScale = parseFloat(cssVar('--canvas-subtitle-scale'));
-    ctx.font = `${Math.floor(w * subtitleScale)}px system-ui, -apple-system, Segoe UI, Roboto, Arial`;
-    ctx.fillText(`of ${fmt(totalDuration)}`, cx, cy + w*0.065);
+
+    ctx.save();
+    ctx.fillStyle = cssVar('--ink');
+    ctx.globalAlpha = isPlaying ? 1 : 0.6;
+    ctx.font = `bold ${Math.floor(w * parseFloat(cssVar('--canvas-time-scale')))}px ${fontStack}`;
+    ctx.fillText(fmt(cur), cx, cy - w*0.005);
+    ctx.restore();
+
+    const nextGongTime = gongTimes.find(t => t > currentTime);
+    let countdownText, countdownColor;
+    if (nextGongTime) {
+      const secsToGong = Math.max(0, Math.ceil(nextGongTime - currentTime));
+      countdownText = `next gong in ${fmtShort(secsToGong)}`;
+      // Accent that turns to ink over the final minute (quantized to whole seconds)
+      countdownColor = !isPlaying ? cssVar('--muted')
+        : secsToGong > 60 ? cssVar('--accent')
+        : mixHex(cssVar('--accent'), cssVar('--ink'), (60 - secsToGong) / 60);
+    } else {
+      countdownText = 'session complete';
+      countdownColor = cssVar('--muted');
+    }
+    ctx.fillStyle = countdownColor;
+    ctx.font = `700 ${Math.floor(w * parseFloat(cssVar('--canvas-subtitle-scale')))}px ${fontStack}`;
+    ctx.fillText(countdownText, cx, cy + w*0.085);
   }
 
   // Time-based hue shift (9pm to 5am)
