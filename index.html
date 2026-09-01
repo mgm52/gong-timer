@@ -712,8 +712,8 @@
     const amp = 1 - (testGongAudio.currentTime / d);
     testGongWave.style.setProperty('--amp', Math.max(0.2, amp).toFixed(3));
   }
-  btnTestGong.addEventListener('click', async () => {
-    await primeAudioIfNeeded();
+  btnTestGong.addEventListener('click', () => {
+    primeAudioIfNeeded(); // synchronous, so the play() below is still inside the tap gesture
     if (audioPrimed) {
       stopTestGongWave();
       testGongAudio = playGongSound();
@@ -1023,27 +1023,24 @@
     }
     finalGongAudio = new Audio('./final_gongs.mp3');
   }
-  let primePromise = null;
+  // Unlock the gong elements for later programmatic playback. Must run
+  // synchronously inside a user gesture: iOS Safari lifts its per-element
+  // gesture requirement when load() (or play()) is called during one.
+  // load() is used rather than a muted play()/pause() because iOS doesn't
+  // reliably honour `muted` on audio elements, so that approach can leak an
+  // audible blip of the gong on the first tap.
   function primeAudioIfNeeded() {
-    if (audioPrimed) return Promise.resolve();
-    if (!primePromise) {
-      primePromise = (async () => {
-        createGongPool();
-        try {
-          for (const a of gongPool) {
-            a.muted = true; await a.play(); a.pause(); a.currentTime = 0; a.muted = false;
-          }
-          if (finalGongAudio) {
-            finalGongAudio.muted = true; await finalGongAudio.play(); finalGongAudio.pause(); finalGongAudio.currentTime = 0; finalGongAudio.muted = false;
-          }
-          audioPrimed = true;
-        } catch (err) {
-          console.warn('Audio prime failed:', err);
-        }
-        primePromise = null; // retry on the next user gesture if priming failed
-      })();
+    if (!audioPrimed) {
+      createGongPool();
+      try {
+        for (const a of gongPool) a.load();
+        if (finalGongAudio) finalGongAudio.load();
+        audioPrimed = true;
+      } catch (err) {
+        console.warn('Audio prime failed:', err); // retried on the next user gesture
+      }
     }
-    return primePromise;
+    return Promise.resolve();
   }
   function playGongSound() {
     if (!audioPrimed || !gongPool.length) return null;
