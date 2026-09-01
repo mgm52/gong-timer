@@ -473,6 +473,41 @@
     border-color: rgba(110,231,255,.6);
     box-shadow: var(--glow);
   }
+  /* Animated bars under the test gong button while the gong is sounding */
+  .test-gong-wrap { position: relative; display: flex; flex-direction: column; }
+  .gong-wave {
+    position: absolute;
+    top: 100%;
+    left: 0; right: 0;
+    margin-top: 12px;
+    height: 22px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity .3s ease;
+    pointer-events: none;
+  }
+  .gong-wave span {
+    width: 4px;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transform: scaleY(.15);
+    transform-origin: center;
+  }
+  .gong-wave.playing { opacity: 1; }
+  .gong-wave.playing span { animation: waveBar .9s ease-in-out infinite; }
+  .gong-wave.playing span:nth-child(1), .gong-wave.playing span:nth-child(7) { animation-delay: .00s; animation-duration: 1.1s; }
+  .gong-wave.playing span:nth-child(2), .gong-wave.playing span:nth-child(6) { animation-delay: .15s; }
+  .gong-wave.playing span:nth-child(3), .gong-wave.playing span:nth-child(5) { animation-delay: .30s; animation-duration: .8s; }
+  .gong-wave.playing span:nth-child(4) { animation-delay: .45s; animation-duration: .7s; }
+  @keyframes waveBar {
+    0%, 100% { transform: scaleY(.15); }
+    50%      { transform: scaleY(var(--amp, 1)); } /* --amp decays as the gong fades */
+  }
+
   @media (pointer: coarse) {
     .title-btn {
       font-size: 18px;
@@ -494,7 +529,10 @@
     <button id="btnNew" class="title-btn title-btn-primary">i have <strong>not</strong> used this app before</button>
     <button id="btnReturning" class="title-btn">i have used this app before</button>
     <button id="btnResume" class="title-btn" hidden>resume previous session</button>
-    <button id="btnTestGong" class="title-btn">&#128365; play a test gong<br><small style="font-weight:400;color:var(--muted)">check your volume before starting</small></button>
+    <div class="test-gong-wrap">
+      <button id="btnTestGong" class="title-btn">&#128365; play a test gong<br><small style="font-weight:400;color:var(--muted)">check your volume before starting</small></button>
+      <div id="testGongWave" class="gong-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    </div>
   </div>
 </div>
 
@@ -657,9 +695,36 @@
     showOverlay();
   });
 
+  const testGongWave = document.getElementById('testGongWave');
+  let testGongAudio = null;
+  function stopTestGongWave() {
+    if (!testGongAudio) return;
+    testGongAudio.removeEventListener('timeupdate', onTestGongTime);
+    testGongAudio.removeEventListener('ended', stopTestGongWave);
+    testGongAudio.removeEventListener('pause', stopTestGongWave);
+    testGongAudio = null;
+    testGongWave.classList.remove('playing');
+  }
+  function onTestGongTime() {
+    // shrink the bars as the gong rings out
+    const d = testGongAudio.duration;
+    if (!d || !isFinite(d)) return;
+    const amp = 1 - (testGongAudio.currentTime / d);
+    testGongWave.style.setProperty('--amp', Math.max(0.2, amp).toFixed(3));
+  }
   btnTestGong.addEventListener('click', async () => {
     await primeAudioIfNeeded();
-    if (audioPrimed) playGongSound();
+    if (audioPrimed) {
+      stopTestGongWave();
+      testGongAudio = playGongSound();
+      if (testGongAudio) {
+        testGongWave.style.setProperty('--amp', '1');
+        testGongWave.classList.add('playing');
+        testGongAudio.addEventListener('timeupdate', onTestGongTime);
+        testGongAudio.addEventListener('ended', stopTestGongWave);
+        testGongAudio.addEventListener('pause', stopTestGongWave);
+      }
+    }
     else showToast('audio is blocked — check your browser settings');
   });
 
@@ -981,7 +1046,7 @@
     return primePromise;
   }
   function playGongSound() {
-    if (!audioPrimed || !gongPool.length) return;
+    if (!audioPrimed || !gongPool.length) return null;
     const a = gongPool[gongIndex];
     gongIndex = (gongIndex + 1) % gongPool.length;
 
@@ -997,6 +1062,7 @@
       a.play().catch(e => console.warn('play() blocked:', e));
     }
     catch (e) { console.warn('play error:', e); }
+    return a;
   }
   function addGongPulse() {
     pulses.push({ t: performance.now() });
