@@ -510,6 +510,18 @@
       <li>Turn your volume up &mdash; use the test gong on the title screen</li>
       <li>Keep this page open during the session</li>
     </ul>
+    <div id="homeScreenSection" hidden>
+      <h3>Add to Home Screen</h3>
+      <p>For a full-screen timer without the browser bars, add this app to your Home Screen and open it from there:</p>
+      <ul id="homeScreenIos" hidden>
+        <li>Tap the Share button (the square with an arrow) at the bottom of Safari</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong></li>
+      </ul>
+      <ul id="homeScreenAndroid" hidden>
+        <li>Tap the browser menu (&#8942;) in the top corner</li>
+        <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>), then confirm</li>
+      </ul>
+    </div>
     <button id="overlayClose" class="btn-accent">got it</button>
   </div>
 </div>
@@ -575,6 +587,17 @@
   overlayClose.addEventListener('click', hideOverlay);
   welcomeOverlay.addEventListener('click', (e) => { if (e.target === welcomeOverlay) hideOverlay(); });
   helpBtn.addEventListener('click', (e) => { e.stopPropagation(); showOverlay(); helpBtn.blur(); });
+
+  // Show "Add to Home Screen" instructions only on phones/tablets that are still running inside a browser
+  (() => {
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
+    const isAndroid = /Android/.test(ua);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (isStandalone || !(isIOS || isAndroid)) return;
+    document.getElementById('homeScreenSection').hidden = false;
+    document.getElementById(isIOS ? 'homeScreenIos' : 'homeScreenAndroid').hidden = false;
+  })();
 
   let toastTimeout = null;
   function showToast(message, duration = 2200) {
