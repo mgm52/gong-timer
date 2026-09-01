@@ -382,11 +382,20 @@
     padding: 24px;
     box-shadow: 0 20px 60px rgba(0,0,0,.5);
   }
-  .overlay-card h2 { margin: 0 0 12px 0; font-size: 22px; color: var(--ink); }
-  .overlay-card h3 { margin: 16px 0 6px 0; font-size: var(--font-sm); color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
-  .overlay-card ul { margin: 0; padding-left: 20px; color: var(--muted); font-size: var(--font-sm); line-height: 1.6; }
-  .overlay-card p { color: var(--muted); font-size: var(--font-sm); line-height: 1.6; margin: 8px 0; }
-  .overlay-card .btn-accent { margin-top: 18px; width: 100%; }
+  .overlay-card h2 { margin: 0 0 16px 0; font-size: 24px; color: var(--ink); line-height: 1.25; }
+  .overlay-card ul { margin: 0; padding-left: 22px; color: var(--muted); font-size: 17px; line-height: 1.55; }
+  .overlay-card li + li { margin-top: 10px; }
+  .overlay-card p { color: var(--muted); font-size: 17px; line-height: 1.55; margin: 0 0 12px 0; }
+  .overlay-card strong { color: var(--ink); font-weight: 700; }
+  .slide[hidden] { display: none; }
+  .slide { animation: slideIn .2s ease; }
+  @keyframes slideIn { from { transform: translateX(10px); opacity: 0 } }
+  .slide-nav { display: flex; align-items: center; gap: 12px; margin-top: 24px; }
+  .slide-nav .btn-accent { flex: 1; }
+  .slide-nav button[hidden] { display: none; }
+  .slide-dots { display: flex; gap: 6px; justify-content: center; margin-top: 16px; }
+  .slide-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .35; transition: opacity .2s ease, background .2s ease; }
+  .slide-dots span.active { background: var(--accent); opacity: 1; }
 
   /* Toast notifications */
   .toast {
@@ -491,26 +500,53 @@
 
 <div id="welcomeOverlay" class="overlay" hidden>
   <div class="overlay-card" role="dialog" aria-modal="true" aria-labelledby="overlayTitle">
-    <h2 id="overlayTitle">Welcome to the Dyad Gong Timer</h2>
-    <p>This app conducts 38-minute dyads consisting of 8 cycles.</p>
-    <h3>About</h3>
-    <ul>
-      <li>After each cycle, 3 gongs play</li>
-      <li>At the end of the dyad, 5 gongs play in quick succession</li>
-    </ul>
-    <h3>Controls</h3>
-    <ul>
-      <li>Tap the center of the dial to pause / play</li>
-      <li>Drag around the dial ring to change the current time</li>
-      <li>The bottom buttons skip &plusmn;30s, jump to the quarter points (&bull; &bull;&bull; &bull;&bull;&bull;), or skip to just before the next gong (&gt;&gt;)</li>
-      <li>The dial shows time elapsed; below it, time remaining and the clock time the dyad will end</li>
-    </ul>
-    <h3>Tips</h3>
-    <ul>
-      <li>Turn your volume up &mdash; use the test gong on the title screen</li>
-      <li>Keep this page open during the session</li>
-    </ul>
-    <button id="overlayClose" class="btn-accent">got it</button>
+    <section class="slide">
+      <h2 id="overlayTitle">Welcome to the Dyad Gong Timer</h2>
+      <p>This app conducts a <strong>38-minute dyad</strong> made up of <strong>8 cycles</strong>.</p>
+      <ul>
+        <li>After each cycle, 3 gongs play</li>
+        <li>At the end of the dyad, 5 gongs play in quick succession</li>
+      </ul>
+    </section>
+    <section class="slide" hidden>
+      <h2>Main controls</h2>
+      <ul>
+        <li><strong>Tap the center</strong> of the dial to <strong>pause / play</strong></li>
+        <li><strong>Drag around the ring</strong> to <strong>change the time</strong></li>
+      </ul>
+    </section>
+    <section class="slide" hidden>
+      <h2>Buttons</h2>
+      <ul>
+        <li><strong>&minus;30s / +30s</strong> skip <strong>back or forward</strong></li>
+        <li><strong>&bull; &nbsp;&bull;&bull; &nbsp;&bull;&bull;&bull;</strong> jump to the <strong>quarter points</strong></li>
+        <li><strong>&gt;&gt;</strong> skips to just before the <strong>next gong</strong></li>
+      </ul>
+    </section>
+    <section class="slide" hidden>
+      <h2>Before you start</h2>
+      <ul>
+        <li><strong>Turn your volume up</strong> &mdash; use the <strong>test gong</strong> on the title screen</li>
+        <li><strong>Keep this page open</strong> during the session</li>
+      </ul>
+    </section>
+    <section id="homeScreenSlide" class="slide" hidden>
+      <h2>Add to Home Screen</h2>
+      <p>For a <strong>full-screen timer</strong> without the browser bars, add this app to your <strong>Home Screen</strong> and open it from there.</p>
+      <ul id="homeScreenIos" hidden>
+        <li>Tap the <strong>Share</strong> button (the square with an arrow) at the bottom of Safari</li>
+        <li>Scroll down and tap <strong>Add to Home Screen</strong>, then <strong>Add</strong></li>
+      </ul>
+      <ul id="homeScreenAndroid" hidden>
+        <li>Tap the browser <strong>menu (&#8942;)</strong> in the top corner</li>
+        <li>Tap <strong>Add to Home screen</strong> (or <strong>Install app</strong>), then confirm</li>
+      </ul>
+    </section>
+    <div class="slide-nav">
+      <button id="slideBack" aria-label="Previous">&larr;</button>
+      <button id="slideNext" class="btn-accent">next</button>
+    </div>
+    <div id="slideDots" class="slide-dots" aria-hidden="true"></div>
   </div>
 </div>
 
@@ -560,7 +596,9 @@
   const btnResume = document.getElementById('btnResume');
   const btnTestGong = document.getElementById('btnTestGong');
   const welcomeOverlay = document.getElementById('welcomeOverlay');
-  const overlayClose = document.getElementById('overlayClose');
+  const slideBack = document.getElementById('slideBack');
+  const slideNext = document.getElementById('slideNext');
+  const slideDots = document.getElementById('slideDots');
   const helpBtn = document.getElementById('helpBtn');
   const toastEl = document.getElementById('toast');
   const mainWrap = document.querySelector('.wrap');
@@ -570,9 +608,33 @@
     mainWrap.style.display = 'flex';
     initSessionAudio();
   }
-  function showOverlay() { welcomeOverlay.hidden = false; overlayClose.focus(); }
+
+  // Tutorial slides — the "Add to Home Screen" slide is only included on phones/tablets
+  // that are still running inside a browser tab (not launched from the Home Screen)
+  const slides = (() => {
+    const all = Array.from(welcomeOverlay.querySelectorAll('.slide'));
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS reports as Mac
+    const isAndroid = /Android/.test(ua);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    if (isStandalone || !(isIOS || isAndroid)) return all.filter(s => s.id !== 'homeScreenSlide');
+    document.getElementById(isIOS ? 'homeScreenIos' : 'homeScreenAndroid').hidden = false;
+    return all;
+  })();
+  slides.forEach(() => slideDots.appendChild(document.createElement('span')));
+  let slideIdx = 0;
+  function showSlide(i) {
+    slideIdx = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((s, k) => { s.hidden = k !== slideIdx; });
+    Array.from(slideDots.children).forEach((d, k) => d.classList.toggle('active', k === slideIdx));
+    slideBack.hidden = slideIdx === 0;
+    slideNext.textContent = slideIdx === slides.length - 1 ? 'got it' : 'next';
+    welcomeOverlay.querySelector('.overlay-card').scrollTop = 0;
+  }
+  function showOverlay() { showSlide(0); welcomeOverlay.hidden = false; slideNext.focus(); }
   function hideOverlay() { welcomeOverlay.hidden = true; }
-  overlayClose.addEventListener('click', hideOverlay);
+  slideNext.addEventListener('click', () => { if (slideIdx === slides.length - 1) hideOverlay(); else showSlide(slideIdx + 1); });
+  slideBack.addEventListener('click', () => showSlide(slideIdx - 1));
   welcomeOverlay.addEventListener('click', (e) => { if (e.target === welcomeOverlay) hideOverlay(); });
   helpBtn.addEventListener('click', (e) => { e.stopPropagation(); showOverlay(); helpBtn.blur(); });
 
@@ -1219,9 +1281,13 @@
     showToast(`skipped to ${fmt(currentTime)} — next gong imminent`);
   });
   window.addEventListener('keydown', async (e) => {
-    if (e.key === 'Escape' && !welcomeOverlay.hidden) { hideOverlay(); return; }
+    if (!welcomeOverlay.hidden) {                     // tutorial open: arrows page through slides, Escape closes
+      if (e.key === 'Escape') hideOverlay();
+      if (e.key === 'ArrowRight') slideNext.click();
+      if (e.key === 'ArrowLeft') showSlide(slideIdx - 1);
+      return;
+    }
     if (titleScreen.style.display !== 'none') return; // ignore shortcuts behind the title screen
-    if (!welcomeOverlay.hidden) return;               // ...and behind the help overlay
     if (e.code === 'Space') { e.preventDefault(); await primeAudioIfNeeded(); if (isPlaying) pause(); else play(); }
     if (e.key === 'ArrowRight') { seekTo(currentTime + 5); }
     if (e.key === 'ArrowLeft') { seekTo(currentTime - 5); }
